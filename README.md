@@ -1,46 +1,29 @@
-# USC Campus Walk — deploying to Vercel
+# USC Campus Walk
 
-This is a single static page. There is no build step, no framework and no
-server code: `index.html` contains the world data and the whole engine, and
-pulls three.js from a CDN at runtime.
+A first-person walking tour of USC's University Park Campus and Exposition Park,
+in the browser. Walk with WASD, look with the arrow keys, press T to jump between
+landmarks and F to fly above campus. Built with three.js from OpenStreetMap
+footprints, with the landmark buildings (Doheny, Leavey, Bovard, Mudd, the DMC,
+the Coliseum, the Rose Garden and more) modelled by hand.
 
-## Fastest way (no account setup beyond signing in)
+## Layout
 
-1. Go to vercel.com/new
-2. Choose the option to deploy a template/other, then drag this whole folder
-   (or the zip) onto the upload area.
-3. Vercel detects "Other" as the framework preset. Leave every build setting
-   blank — no build command, no output directory.
-4. Deploy. You get a live URL in about twenty seconds.
+- `index.html` is the finished, self-contained page. This is what Vercel serves.
+- `world.txt` is the map data. The `*.js` files are the engine and the hand-built places,
+  concatenated in order by `build.sh`.
+- `CLAUDE.md` explains the code, the build and the testing tools in detail.
 
-## Recommended way, if you want to keep updating it
+## Updating the site
 
-1. Make a new GitHub repo and put `index.html` and `vercel.json` at its root.
-2. On vercel.com/new, import that repo. Framework preset: **Other**.
-   Build command: leave empty. Output directory: leave empty (or `.`).
-3. Deploy.
+```
+./build.sh               # builds game.html from the sources
+python3 make_deploy.py   # turns game.html into index.html
+git add -A && git commit -m "..." && git push
+```
 
-From then on, every `git push` to the main branch redeploys the production
-URL automatically. Pushing to any other branch gives you a preview URL you can
-look at before merging.
+## Deploying to Vercel
 
-## Vercel CLI
-
-    npm i -g vercel
-    cd this-folder
-    vercel          # first run creates the project, gives a preview URL
-    vercel --prod   # promotes it to the production domain
-
-Re-run `vercel --prod` any time the file changes.
-
-## Notes
-
-- `vercel.json` only tells Vercel not to cache the HTML, so a redeploy shows up
-  immediately instead of being served from cache for a while.
-- The page loads three.js from cdnjs and two fonts from Google Fonts. Both are
-  public CDNs; nothing else leaves the page.
-- Every deploy is kept. If an update breaks something, open the project's
-  Deployments tab, find the last good one and use "Promote to Production" to
-  roll back.
-- A custom domain can be added under Settings -> Domains at any time without
-  redeploying.
+It is a single static page: no framework, no build command, no server code.
+Import this repo at vercel.com/new, leave the framework preset as "Other" and every
+build setting blank, and deploy. Pushes to `main` redeploy automatically.
+`vercel.json` only turns off long caching so updates show up right away.

@@ -103,6 +103,8 @@
 </style>
 </head>
 <body>
+
+
 <div id="wrap">
   <div id="hud" class="hide">
     <div id="brandtag">USC &#183; <b>UNIVERSITY PARK CAMPUS</b></div>
@@ -228,7 +230,7 @@ Bohnett Residential College|93,-478,19
 Musick Law Building|104,224,17
 Hubbard Hall|112,123,13
 Nemirovsky Residential College|114,-437,19
-Von KleinSmid Center|130,-62,38
+Dr. Joseph Medicine Crow Center (DMC)|130,-62,38
 Waite Phillips Hall|146,-153,46
 Doheny Memorial Library|150,42,30
 Dauterive Hall|159,192,16
@@ -3535,6 +3537,78 @@ for(i=0;i<(SEC.S||[]).length;i++){ q=SEC.S[i].split('|'); var rg=decode(q[1]);
 for(i=0;i<(SEC.G||[]).length;i++){ q=SEC.G[i].split('|'); rg=decode(q[1]);
   if(ringArea(rg)<0) rg.reverse(); PARKS.push({name:q[0], ring:rg}); }
 
+/* ------------------------------------------------ the Coliseum's shape
+   An idealised stadium outline fitted to the OSM footprint: a superellipse
+   bowl, squared off at the east end where the peristyle stands. The field
+   is sunk below the street, the way the real one is, so the ground has a
+   hole cut in it here and the walk system knows the floor is lower. */
+var COL={cx:-231, cz:725, aO:160, bO:114, pO:2.6, aI:72, bI:38, pI:2.3, ixo:10,
+         xp:-85, fld:-11.0, seg:168};
+function _sEll(a,b,p,t){
+  var c=Math.cos(t), s=Math.sin(t);
+  return [a*(c<0?-1:1)*Math.pow(Math.abs(c),2/p), b*(s<0?-1:1)*Math.pow(Math.abs(s),2/p)];
+}
+function colOuterRaw(t){ var q=_sEll(COL.aO,COL.bO,COL.pO,t); return [COL.cx+q[0],COL.cz+q[1]]; }
+function colOuter(t){ var q=colOuterRaw(t); if(q[0]>COL.xp) q[0]=COL.xp; return q; }
+function colInner(t){ var q=_sEll(COL.aI,COL.bI,COL.pI,t); return [COL.cx+COL.ixo+q[0],COL.cz+q[1]]; }
+var COL_HOLE=(function(){ var r=[];
+  for(var i=0;i<COL.seg;i++) r.push(colOuter(i/COL.seg*6.283185307));
+  return r; })();
+function inColHole(x,z){
+  if(x<COL.cx-COL.aO-1||x>COL.xp+0.01||z<COL.cz-COL.bO-1||z>COL.cz+COL.bO+1) return false;
+  var u=Math.abs(x-COL.cx)/COL.aO, v=Math.abs(z-COL.cz)/COL.bO;
+  return Math.pow(u,COL.pO)+Math.pow(v,COL.pO)<1;
+}
+
+/* nothing from the map data may sit inside the bowl - it is built by hand */
+(function(){
+  function cIn(r){ var x=0,z=0; for(var i=0;i<r.length;i++){x+=r[i][0];z+=r[i][1];}
+    return inColHole(x/r.length,z/r.length); }
+  BUILDINGS=BUILDINGS.filter(function(b){ return !cIn(b.ring); });
+  CAMPUS=CAMPUS.filter(function(b){ return !cIn(b.ring); });
+  AREAS=AREAS.filter(function(a){ return !cIn(a.ring); });
+  POINTS=POINTS.filter(function(p){ return !inColHole(p.x,p.z); });
+  function split(list){
+    var out=[];
+    for(var i=0;i<list.length;i++){
+      var cur=[], pts=list[i].pts;
+      for(var j=0;j<pts.length;j++){
+        if(inColHole(pts[j][0],pts[j][1])){ if(cur.length>1) out.push({w:list[i].w,pts:cur}); cur=[]; }
+        else cur.push(pts[j]);
+      }
+      if(cur.length>1) out.push({w:list[i].w,pts:cur});
+    }
+    return out;
+  }
+  ROADS=split(ROADS); PATHS=split(PATHS);
+})();
+
+/* the Exposition Park Rose Garden is laid out by hand in a2c_rose.js: take
+   its fountain out of the water list and its inner walks out of the paths,
+   and give the crowd one clean ring round the plaza instead */
+var ROSE=null;
+(function(){
+  var g=null, i;
+  for(i=0;i<PARKS.length;i++) if(PARKS[i].name==='Exposition Park Rose Garden') g=PARKS[i].ring;
+  if(!g) return;
+  var x0=1e9,x1=-1e9,z0=1e9,z1=-1e9;
+  g.forEach(function(p){ x0=Math.min(x0,p[0]); x1=Math.max(x1,p[0]); z0=Math.min(z0,p[1]); z1=Math.max(z1,p[1]); });
+  function inG(p,pad){ return p[0]>x0+pad&&p[0]<x1-pad&&p[1]>z0+pad&&p[1]<z1-pad; }
+  var fz=(z0+z1)/2, fx=(x0+x1)/2;
+  for(i=WATER.length-1;i>=0;i--){
+    var c=centroid(WATER[i]);
+    if(inG(c,0)){ fx=c[0]; fz=c[1]; WATER.splice(i,1); }
+  }
+  /* line the centre up with the main walk if there is one */
+  for(i=0;i<PATHS.length;i++){ var P=PATHS[i].pts;
+    for(var k=0;k<P.length;k++) if(Math.abs(P[k][1]-fz)<22&&Math.abs(P[k][0]-fx)<3&&
+       Math.abs(P[k][0]-P[P.length-1-k][0])<2) fx=P[k][0]; }
+  PATHS=PATHS.filter(function(p){ return !p.pts.every(function(q){ return inG(q,-1.5); }); });
+  var ring=[]; for(i=0;i<=28;i++){ var a=i/28*6.283185; ring.push([fx+Math.cos(a)*19.5,fz+Math.sin(a)*19.5]); }
+  PATHS.push({w:2.6,pts:ring});
+  ROSE={x0:x0,x1:x1,z0:z0,z1:z1,fx:fx,fz:fz};
+})();
+
 /* ------------------------------------------- where the paving actually is */
 function buildWalkGrid(){
   WALKG={};
@@ -3575,8 +3649,9 @@ var PAL = {
 };
 var C_TREE=[0x4E9B3E,0x63B44C,0x3E8A34];
 var C_CONC=0xBDB7A8;
-var C_GRASS=0x64AC4B, C_ROAD=0x55585F, C_PATH=0xBBB4A2, C_PLAZA=0x9B6249,
-    C_BASE=0x7F7869, C_WATER=0x4FA6D8, C_PITCH=0x5BA94A, C_TRACK=0xA85340;
+var GROUND_MESHES=[];
+var C_GRASS=0x548C3B, C_ROAD=0x55585F, C_PATH=0xBBB4A2, C_PLAZA=0x9B6249,
+    C_BASE=0xB3AC9C, C_WATER=0x4FA6D8, C_PITCH=0x5BA94A, C_TRACK=0xA85340;
 
 /* ------------------------------------------------- geometry accumulator */
 function Mesher(){ this.p=[]; this.n=[]; this.c=[]; }
@@ -3682,6 +3757,24 @@ function flat(M,ring,y,col,shade){
   }
 }
 
+/* flat polygon with holes cut out of it; every triangle is forced to face up */
+function flatHoled(M,ring,holes,y,col,shade){
+  var c=rgb(col,shade===undefined?1:shade), all=ring.slice(), i;
+  var cv=ring.map(function(p){return new T.Vector2(p[0],p[1]);}), hv=[];
+  for(i=0;i<holes.length;i++){ hv.push(holes[i].map(function(p){return new T.Vector2(p[0],p[1]);}));
+    all=all.concat(holes[i]); }
+  var f; try{ f=T.ShapeUtils.triangulateShape(cv,hv); }catch(e){ f=[]; }
+  for(i=0;i<f.length;i++){
+    var A=all[f[i][0]], B=all[f[i][1]], C=all[f[i][2]];
+    var cr=(B[0]-A[0])*(C[1]-A[1])-(B[1]-A[1])*(C[0]-A[0]);
+    if(cr>0) M.tri([A[0],y,A[1]],[C[0],y,C[1]],[B[0],y,B[1]],c,c,c);
+    else     M.tri([A[0],y,A[1]],[B[0],y,B[1]],[C[0],y,C[1]],c,c,c);
+  }
+}
+function ringHasHole(ring){
+  return inRing(ring,COL.cx,COL.cz) && inRing(ring,COL.cx-COL.aO+2,COL.cz) && inRing(ring,COL.xp-2,COL.cz);
+}
+
 /* ribbon along a polyline at height y */
 function ribbon(M,pts,w,y,col,shade){
   var c=rgb(col,shade===undefined?1:shade), hw=w*0.5;
@@ -3706,18 +3799,31 @@ scene.fog=new T.Fog(FOG,320,1600);
 var renderer=new T.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
 renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
 renderer.setSize(innerWidth,innerHeight);
-renderer.outputEncoding=T.sRGBEncoding;
+renderer.outputEncoding=T.LinearEncoding;
 document.getElementById('wrap').appendChild(renderer.domElement);
 
 var BASE_FOV=88;
 var camera=new T.PerspectiveCamera(BASE_FOV,innerWidth/innerHeight,0.12,2600);
 var gunCam=new T.PerspectiveCamera(60,innerWidth/innerHeight,0.01,12);
 
-scene.add(new T.HemisphereLight(0xd6e8ff,0x554f40,0.46));
-var sun=new T.DirectionalLight(0xfff0d2,0.64);
-sun.position.set(-360,520,-240); scene.add(sun);
-var fill=new T.DirectionalLight(0xb4ccf0,0.14);
-fill.position.set(300,240,420); scene.add(fill);
+scene.add(new T.HemisphereLight(0xdcebff,0x6a6150,0.56));
+var sun=new T.DirectionalLight(0xfff0d8,0.84);
+sun.position.set(260,560,380); scene.add(sun); scene.add(sun.target);
+var SUN_DIR=new T.Vector3(260,560,380).normalize();
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=T.PCFSoftShadowMap;
+sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);
+(function(){ var c=sun.shadow.camera; c.left=-115; c.right=115; c.top=115; c.bottom=-115; c.near=10; c.far=1400; })();
+sun.shadow.bias=-0.0006; sun.shadow.normalBias=0.03;
+/* the shadow box follows the walker */
+function placeSun(x,z){
+  var q=0.9; x=Math.round(x/q)*q; z=Math.round(z/q)*q;
+  sun.target.position.set(x,0,z);
+  sun.position.set(x+SUN_DIR.x*700,SUN_DIR.y*700,z+SUN_DIR.z*700);
+}
+var fill=new T.DirectionalLight(0xb4ccf0,0.20);
+fill.position.set(-300,240,-420); scene.add(fill);
 
 /* sky dome */
 (function(){
@@ -3748,7 +3854,7 @@ fill.position.set(300,240,420); scene.add(fill);
   var cg=new T.BufferGeometry();
   cg.setAttribute('position',new T.Float32BufferAttribute(cp,3));
   cg.setAttribute('normal',new T.Float32BufferAttribute(cn,3));
-  var clouds=new T.Mesh(cg,new T.MeshLambertMaterial({color:0xffffff,flatShading:true,fog:false}));
+  var clouds=new T.Mesh(cg,new T.MeshLambertMaterial({color:0xffffff,emissive:0x8c939e,fog:false}));
   clouds.frustumCulled=false; scene.add(clouds);
 })();
 
@@ -4182,7 +4288,7 @@ function coneRoof(M,cx,cz,r,y0,hh,col,n){
           [cx,y0+hh,cz], cd,cd,c);
   }
 }
-/* the open lattice globe on top of the Von KleinSmid tower */
+/* the open lattice globe on top of the Medicine Crow Center (DMC) tower */
 function wireGlobe(M,cx,cy,cz,r){
   var g=rgb(0xC8C2B4,1), gd=rgb(0xC8C2B4,0.6), t=r*0.075, N=12;
   function ring3(axis){
@@ -4212,7 +4318,7 @@ function stripes(M,ring,h,y0,bandH,gapH,colA,colB){
 }
 
 var CUSTOM = {
-/* ---------- Von KleinSmid / Medicine Crow Center ---------- */
+/* ---------- Dr. Joseph Medicine Crow Center (DMC), formerly Von KleinSmid ---------- */
 'Dr. Joseph Medicine Crow Center for International and Public Affairs':
 function(M,B,ring,c,d){
   var h=15.5, wall=0xC4704E;
@@ -4319,37 +4425,6 @@ function(M,B,ring,c,d){
     coneRoof(M,pxp,pzp,0.62,ty+2.6,2.0,0x8A6A4A,5);
   }
   addCollider(oct,ty); addCollider(ring,h);
-  return h;
-},
-
-/* ---------- Leavey Library ---------- */
-'Leavey Library': function(M,B,ring,c,d){
-  var h=24, dark=0x7C5548;
-  prism(M,ring,0,h,dark,dark,0.55);
-  band(M,ring,0,1.5,0.20,0xBFB9A8,1,0.76);
-  stripes(M,ring,h,2.4,0.55,2.9,0xCFC8B6);
-  windows(M,ring,h,0x3E4A54);
-  band(M,ring,h-1.0,h+0.9,0.28,0xCFC8B6,1,0.78);
-  flat(M,offsetRing(ring,-0.5),h+0.94,0x53544F,1);
-  /* the pale stone entrance bay with its little gable and canopy */
-  var ux=-c[0], uz=-c[1], uL=Math.hypot(ux,uz)||1; ux/=uL; uz/=uL;
-  var dd=2; while(dd<90&&inRing(ring,c[0]+ux*dd,c[1]+uz*dd)) dd+=1.5;
-  var fx=c[0]+ux*(dd-3.5), fz=c[1]+uz*(dd-3.5);
-  var pvx=-uz, pvz=ux, hw=5.6, dp=4.0;
-  var bay=[[fx+pvx*hw-ux*dp,fz+pvz*hw-uz*dp],[fx-pvx*hw-ux*dp,fz-pvz*hw-uz*dp],
-           [fx-pvx*hw+ux*dp,fz-pvz*hw+uz*dp],[fx+pvx*hw+ux*dp,fz+pvz*hw+uz*dp]];
-  if(ringArea(bay)<0) bay.reverse();
-  prism(M,bay,0,h+2.2,0xD3CCBA,0xBFB9A8,0.66);
-  var gb=rgb(0xD3CCBA,1);
-  M.tri([fx+pvx*hw+ux*dp,h+2.2,fz+pvz*hw+uz*dp],[fx-pvx*hw+ux*dp,h+2.2,fz-pvz*hw+uz*dp],
-        [fx+ux*dp,h+5.4,fz+uz*dp],gb,gb,gb);
-  archFace(M,fx+ux*dp,fz+uz*dp,pvx,pvz,ux*0.12,uz*0.12,1.0,6.4,h-4.0,0,0x36424C,1);
-  /* canopy on posts over the doors */
-  var cv=[[fx+pvx*4.6+ux*(dp+3.4),fz+pvz*4.6+uz*(dp+3.4)],[fx-pvx*4.6+ux*(dp+3.4),fz-pvz*4.6+uz*(dp+3.4)],
-          [fx-pvx*4.6+ux*dp,fz-pvz*4.6+uz*dp],[fx+pvx*4.6+ux*dp,fz+pvz*4.6+uz*dp]];
-  if(ringArea(cv)<0) cv.reverse();
-  prism(M,cv,4.1,4.5,0x9AA0A4,0x9AA0A4,0.7);
-  addCollider(bay,h+2.2); addCollider(ring,h);
   return h;
 },
 
@@ -5197,21 +5272,610 @@ CUSTOM['USC Iovine and Young Hall']=function(M,B,ring,c,d){
   return h;
 };
 
-/* ---- ground base ---- */
-(function(){
-  var g=new T.PlaneGeometry(4200,4200,48,48);
-  g.rotateX(-Math.PI/2);
-  var pos=g.attributes.position, n=pos.count, arr=new Float32Array(n*3);
-  var base=new T.Color(C_BASE), c2=new T.Color();
-  for(var i=0;i<n;i++){
-    var v=0.86+((Math.sin(pos.getX(i)*0.021)*Math.cos(pos.getZ(i)*0.017)+1)*0.5)*0.28;
-    c2.copy(base).multiplyScalar(v);
-    arr[i*3]=c2.r; arr[i*3+1]=c2.g; arr[i*3+2]=c2.b;
+/* ---------- Mark Taper Hall of Humanities ----------
+   Late modern: red brick striped with thick white floor bands, ribbon
+   windows, and a low front wing of white cantilevered slabs stepping back
+   over a colonnade of square white piers. A ribbed brick lantern on top. */
+CUSTOM['Taper Hall']=function(M,B,ring,c,d){
+  var h=21.5, brick=0xB3573E, white=0xEEECE4, whiteD=0xCFCBBF, glass=0x28323B;
+  var s=simplifyRing(ring,1.0);
+  prism(M,s,0,h,brick,brick,0.55);
+  band(M,s,0,0.55,0.10,whiteD,1,0.70);
+  for(var f=0;f<5;f++){
+    var y=4.2+f*3.5; if(y+1.0>h-0.8) break;
+    band(M,s,y,y+0.95,0.22,white,1,0.74,true);           /* the white floor band */
   }
-  g.setAttribute('color',new T.Float32BufferAttribute(arr,3));
-  var mesh=new T.Mesh(g,new T.MeshLambertMaterial({vertexColors:true,flatShading:true}));
-  mesh.position.y=-0.07; scene.add(mesh);
+  punched(M,s,h-0.9,glass,4.45,3.5,1.9,2.4);            /* paired windows in the brick */
+  band(M,s,1.1,3.3,0.05,glass,0.95,0.75,true);
+  band(M,s,h-0.9,h+0.35,0.26,white,1,0.78);
+  flat(M,offsetRing(s,-0.6),h+0.39,0x55564F,1);
+  /* the stepped white front wing on the side facing Hutton Park */
+  var F=faceToward(s,30,-128);
+  if(F){
+    function P2(u,v){ return [F.x+F.dx*u+F.nx*v, F.z+F.dz*u+F.nz*v]; }
+    function bx(u0,u1,v0,v1,y0,y1,col,sh){
+      var r=[P2(u0,v0),P2(u1,v0),P2(u1,v1),P2(u0,v1)]; if(ringArea(r)<0) r.reverse();
+      prism(M,r,y0,y1,col,col,sh===undefined?0.7:sh); return r; }
+    var W=Math.min(F.L*0.5+3, 22), Dp=9.5;
+    /* recessed ground storey: brick and glass behind the piers */
+    var gw=bx(-W,W,0,3.4,0,4.4,brick,0.6);
+    archFace(M,F.x+F.nx*3.45,F.z+F.nz*3.45,F.dx,F.dz,0,0,0.3,W*1.6,3.6,0,glass,1);
+    addCollider(gw,4.4);
+    /* the square white piers of the colonnade */
+    var np=Math.max(3,Math.round(2*W/5.6));
+    for(var k=0;k<=np;k++){
+      var u=-W+0.5+(2*W-1)*k/np, pp=P2(u,Dp-0.7);
+      postAt(M,pp[0],pp[1],0,4.4,0.42,white,0.8);
+      addCollider([[pp[0]-0.45,pp[1]-0.45],[pp[0]+0.45,pp[1]-0.45],[pp[0]+0.45,pp[1]+0.45],[pp[0]-0.45,pp[1]+0.45]],4.4);
+    }
+    /* the deep white fascia carrying the name */
+    bx(-W-0.4,W+0.4,-0.2,Dp,4.4,5.7,white,0.78);
+    var tp=P2(0,Dp+0.02);
+    facadeText('MARK TAPER HALL OF HUMANITIES',tp[0],tp[1],F.nx,F.nz,5.05,Math.min(2*W*0.7,24),0.75,'#3E3A34');
+    /* second storey: brick with a window band, under a cantilevered white slab */
+    bx(-W+0.8,W-0.8,-0.2,Dp-2.4,5.7,8.7,brick,0.6);
+    var w2=P2(0,Dp-2.35);
+    archFace(M,w2[0],w2[1],F.dx,F.dz,0,0,6.2,2*W-3.2,1.9,0,glass,1);
+    bx(-W,W,-0.2,Dp-1.0,8.7,9.8,white,0.78);
+    /* third storey steps back again */
+    bx(-W+2,W-2,-0.2,Dp-5.0,9.8,12.6,brick,0.6);
+    var w3=P2(0,Dp-4.95);
+    archFace(M,w3[0],w3[1],F.dx,F.dz,0,0,10.3,2*W-5.5,1.8,0,glass,1);
+    bx(-W+1.2,W-1.2,-0.2,Dp-4.2,12.6,13.5,white,0.78);
+    /* the tall white-framed glass bay over the entrance */
+    bx(-4.3,4.3,-0.2,Dp-0.4,5.7,12.6,white,0.8);
+    var g2=P2(0,Dp-0.35);
+    archFace(M,g2[0],g2[1],F.dx,F.dz,0,0,6.1,6.8,6.0,0,0x3B4650,1);
+    for(var m=-1;m<=1;m++) archFace(M,g2[0]+F.dx*m*2.27+F.nx*0.04,g2[1]+F.dz*m*2.27+F.nz*0.04,F.dx,F.dz,0,0,6.1,0.14,6.0,0,white,1);
+    archFace(M,g2[0]+F.nx*0.04,g2[1]+F.nz*0.04,F.dx,F.dz,0,0,9.0,6.8,0.14,0,white,1);
+    /* glass doors in the recess */
+    var dr=P2(0,3.5);
+    archFace(M,dr[0],dr[1],F.dx,F.dz,0,0,0.05,4.2,2.8,0,0x1C2228,1);
+  }
+  /* the ribbed brick lantern on the roof */
+  var ip=innerPoint(s);
+  if(ip&&ip.r>5){
+    var lw=Math.min(6,ip.r*0.7), lx=ip.p[0], lz=ip.p[1];
+    var lr=[[lx-lw,lz-lw*0.7],[lx+lw,lz-lw*0.7],[lx+lw,lz+lw*0.7],[lx-lw,lz+lw*0.7]];
+    prism(M,lr,h,h+6.0,brick,0x6E3324,0.62);
+    for(var e=0;e<4;e++){
+      var A=lr[e], Bq=lr[(e+1)%4], L=Math.hypot(Bq[0]-A[0],Bq[1]-A[1]), ddx=(Bq[0]-A[0])/L, ddz=(Bq[1]-A[1])/L;
+      for(var t=0.5;t<L;t+=0.9) postAt(M,A[0]+ddx*t+ddz*0.12,A[1]+ddz*t-ddx*0.12,h+0.4,h+6.0,0.13,0x8E4230,0.7);
+    }
+  }
+  addCollider(ring,h);
+  return h;
+};
+
+/* ---------- Zumberge Hall (the old Science Hall, 1928) ----------
+   Romanesque brick wings with big arched ground floor windows under a tile
+   roof, and a tall centre pavilion: a cast stone base pierced by a deep
+   carved arch, brick and stone banding, a pierced stone lattice, four
+   arched windows, and a brick gable edged with a corbel arcade and a
+   round stone rose. */
+CUSTOM['Zumberge Hall']=function(M,B,ring,c,d){
+  var h=17.5, brick=0xA14E38, cast=0xDCC9A2, castD=0xBFA982, tile=0xA8492E, tileD=0x8A3A24,
+      glass=0x3C4843, dark=0x221E1B;
+  var s=simplifyRing(ring,1.0);
+  prism(M,s,0,h,brick,brick,0.55);
+  band(M,s,0,1.2,0.20,cast,1,0.68);
+  archedWindows(M,s,5.6,1.7,4.6,2.5,5.2,glass);
+  band(M,s,5.9,6.3,0.14,cast,1,0.78,true);
+  sqWindows(M,s,h-1.6,6.9,3.5,2.3,1.6,4.0,glass);
+  band(M,s,h-1.5,h-0.9,0.18,cast,1,0.80,true);
+  var e2=offsetRing(simplifyRing(s,2.2),0.85);
+  band(M,e2,h,h+0.4,0,tileD,0.85,0.55);
+  var rise=Math.max(3.0,Math.min(6.0,d.min*0.24));
+  hipRoof(M,e2,h+0.4,rise,Math.min(rise*1.1,d.min*0.32),tile);
+  /* the centre pavilion, on the Trousdale front */
+  var F=faceToward(s,-15,145);
+  if(F){
+    var ux=F.dx, uz=F.dz, nx=F.nx, nz=F.nz;
+    function P2(u,v){ return [F.x+ux*u+nx*v, F.z+uz*u+nz*v]; }
+    function bx(u0,u1,v0,v1,y0,y1,col,sh){
+      var r=[P2(u0,v0),P2(u1,v0),P2(u1,v1),P2(u0,v1)]; if(ringArea(r)<0) r.reverse();
+      prism(M,r,y0,y1,col,col,sh===undefined?0.66:sh); return r; }
+    function qf(A,Bv,C,D,col,sh,n){
+      var cc=rgb(col,sh), ax=Bv[0]-A[0],ay=Bv[1]-A[1],az=Bv[2]-A[2], bx2=C[0]-A[0],by=C[1]-A[1],bz=C[2]-A[2];
+      var fx=ay*bz-az*by, fy=az*bx2-ax*bz, fz=ax*by-ay*bx2;
+      if(fx*n[0]+fy*n[1]+fz*n[2]>=0) M.quad(A,Bv,C,D,cc,cc,cc,cc); else M.quad(A,D,C,Bv,cc,cc,cc,cc);
+    }
+    var Pw=10.5, pd=1.6, back=-12, HT=23.4, AP=29.6;
+    var pav=bx(-Pw,Pw,back,pd,0,9.0,cast,0.66);
+    /* brick and stone in alternating courses up the middle storeys */
+    for(var y=9.0;y<17.6;y+=0.95){
+      bx(-Pw,Pw,back,pd,y,y+0.62,brick,0.58);
+      bx(-Pw-0.03,Pw+0.03,back,pd+0.03,y+0.62,y+0.95,cast,0.72);
+    }
+    /* the pierced stone lattice band */
+    bx(-Pw-0.1,Pw+0.1,back,pd+0.12,17.6,18.9,cast,0.75);
+    for(var k=-9;k<=9;k++){
+      var lp=P2(k*1.05,pd+0.14);
+      archFace(M,lp[0],lp[1],ux,uz,0,0,17.95,0.42,0.6,0,dark,1);
+    }
+    /* four arched windows with scalloped stone hoods */
+    bx(-Pw,Pw,back,pd,18.9,HT,brick,0.58);
+    for(var w=0;w<4;w++){
+      var wu=-5.4+w*3.6, wp=P2(wu,pd+0.02);
+      archFace(M,wp[0],wp[1],ux,uz,nx*0.02,nz*0.02,19.2,3.0,2.2,1.5,cast,1);
+      archFace(M,wp[0],wp[1],ux,uz,nx*0.08,nz*0.08,19.35,2.1,2.0,1.05,glass,1);
+    }
+    bx(-Pw-0.3,Pw+0.3,back,pd+0.3,HT,HT+0.45,cast,0.8);
+    /* the gable, brick, with its rose and corbel arcade along both rakes */
+    var gl=P2(-Pw-0.3,pd+0.02), gr=P2(Pw+0.3,pd+0.02), ga=P2(0,pd+0.02);
+    var cb=rgb(brick,1);
+    M.tri([gl[0],HT+0.45,gl[1]],[gr[0],HT+0.45,gr[1]],[ga[0],AP,ga[1]],cb,cb,cb);
+    M.tri([gr[0],HT+0.45,gr[1]],[gl[0],HT+0.45,gl[1]],[ga[0],AP,ga[1]],cb,cb,cb);
+    var NS=11;
+    for(var sd=-1;sd<=1;sd+=2){
+      for(var q=0;q<NS;q++){
+        var t=(q+0.5)/NS, uu=sd*(Pw+0.3)*(1-t), yy=HT+0.45+(AP-HT-0.45)*t;
+        var cp=P2(uu,pd+0.15);
+        archFace(M,cp[0],cp[1],ux,uz,0,0,yy-0.95,0.72,0.35,0.36,cast,1);
+        archFace(M,cp[0],cp[1],ux,uz,nx*0.03,nz*0.03,yy-0.85,0.42,0.28,0.2,brick,0.7);
+      }
+      var re=P2(sd*(Pw+0.3),pd+0.02);
+      segBox(M,[re[0],re[1]],[ga[0],ga[1]],HT+0.45,HT+0.8,0.1,cast,0.8);
+    }
+    var rose=P2(0,pd+0.05);
+    var rm=new T.Mesh(new T.CircleGeometry(1.25,18),new T.MeshLambertMaterial({color:cast}));
+    rm.position.set(rose[0],27.2,rose[1]); rm.rotation.y=Math.atan2(nx,nz); scene.add(rm);
+    var rm2=new T.Mesh(new T.RingGeometry(0.45,0.95,12),new T.MeshLambertMaterial({color:castD}));
+    rm2.position.set(rose[0]+nx*0.02,27.2,rose[1]+nz*0.02); rm2.rotation.y=Math.atan2(nx,nz); scene.add(rm2);
+    /* the tiled gable roof running back into the building */
+    var ct=rgb(tile,1), cd=rgb(tileD,0.8);
+    for(var sd2=-1;sd2<=1;sd2+=2){
+      var e0=P2(sd2*(Pw+0.6),pd+0.4), e1=P2(sd2*(Pw+0.6),back), r0=P2(0,pd+0.4), r1=P2(0,back);
+      qf([e0[0],HT+0.3,e0[1]],[r0[0],AP+0.25,r0[1]],[r1[0],AP+0.25,r1[1]],[e1[0],HT+0.3,e1[1]],tile,1,[nx*0,1,0]);
+      qf([e0[0],HT+0.2,e0[1]],[r0[0],AP+0.15,r0[1]],[r1[0],AP+0.15,r1[1]],[e1[0],HT+0.2,e1[1]],tileD,0.7,[0,-1,0]);
+    }
+    /* the deep carved arch, with lanterns either side */
+    var ap=P2(0,pd+0.02);
+    archFace(M,ap[0],ap[1],ux,uz,nx*0.02,nz*0.02,0,6.4,3.3,3.2,castD,1);
+    archFace(M,ap[0],ap[1],ux,uz,nx*0.05,nz*0.05,0,5.4,3.3,2.7,0xC9B58E,1);
+    archFace(M,ap[0],ap[1],ux,uz,nx*0.08,nz*0.08,0,4.2,3.2,2.1,dark,1);
+    for(var ls=-1;ls<=1;ls+=2){
+      var lnp=P2(ls*3.9,pd+0.35);
+      var lan=new T.Mesh(new T.CylinderGeometry(0.2,0.14,0.6,6),new T.MeshLambertMaterial({color:0xE9C27A,emissive:0x5a3a10}));
+      lan.position.set(lnp[0],3.3,lnp[1]); scene.add(lan);
+    }
+    /* stone windows either side of the arch, and the carved name */
+    for(var sw=-1;sw<=1;sw+=2){
+      var wp2=P2(sw*7.2,pd+0.02);
+      archFace(M,wp2[0],wp2[1],ux,uz,nx*0.05,nz*0.05,1.6,2.6,4.6,0,glass,1);
+      archFace(M,wp2[0],wp2[1],ux,uz,nx*0.05,nz*0.05,10.0,2.4,2.2,0,glass,1);
+      archFace(M,wp2[0],wp2[1],ux,uz,nx*0.05,nz*0.05,14.0,2.4,2.2,0,glass,1);
+      var wp3=P2(sw*3.4,pd+0.02);
+      archFace(M,wp3[0],wp3[1],ux,uz,nx*0.05,nz*0.05,10.0,2.4,2.2,0,glass,1);
+      archFace(M,wp3[0],wp3[1],ux,uz,nx*0.05,nz*0.05,14.0,2.4,2.2,0,glass,1);
+    }
+    /* carved ornament panel over the arch */
+    var op=P2(0,pd+0.03);
+    archFace(M,op[0],op[1],ux,uz,nx*0.02,nz*0.02,7.4,12.5,1.1,0,castD,1);
+    var tp=P2(0,pd+0.04);
+    facadeText('SCIENCE HALL',tp[0],tp[1],nx,nz,12.9,9.5,0.9,'#6A5A42');
+    addCollider(pav,HT);
+  }
+  addCollider(ring,h);
+  return h;
+};
+
+/* ---------- structured facades for the two libraries ----------
+   Every wall is laid out in equal bays between shallow pilasters, with one
+   opening per bay on each storey, sills under them and mullions in them,
+   so a long wall reads as ordered architecture instead of a striped box. */
+function bayFacade(M,s,o){
+  var n=s.length;
+  for(var i=0;i<n;i++){
+    var a=s[i], b=s[(i+1)%n];
+    var dx=b[0]-a[0], dz=b[1]-a[1], L=Math.hypot(dx,dz);
+    if(L<(o.minL||3.6)) continue;
+    dx/=L; dz/=L;
+    var nx=dz, nz=-dx;
+    var nb=Math.max(1,Math.round(L/o.bay)), bw=L/nb;
+    var Q=function(u,v){ return [a[0]+dx*u+nx*v, a[1]+dz*u+nz*v]; };
+    var box=function(u0,u1,v0,v1,y0,y1,col,sh){
+      var r=[Q(u0,v0),Q(u1,v0),Q(u1,v1),Q(u0,v1)]; if(ringArea(r)<0) r.reverse();
+      prism(M,r,y0,y1,col,col,sh===undefined?0.62:sh); };
+    if(o.pil && L>=7){
+      for(var k=0;k<=nb;k++){
+        var u=k*bw, pw=o.pil*0.5;
+        box(Math.max(0.02,u-pw),Math.min(L-0.02,u+pw),-0.05,o.pilD||0.26,o.pilY0,o.pilY1,o.pilCol,0.6);
+      }
+    }
+    for(k=0;k<nb;k++){
+      var uc=(k+0.5)*bw;
+      for(var f=0;f<o.floors.length;f++){
+        var F=o.floors[f], w=Math.min(F.w, bw-(o.pil?o.pil+0.9:1.0));
+        if(w<0.8) continue;
+        var cols=F.pair?[uc-w*0.27,uc+w*0.27]:[uc], ww=F.pair?w*0.42:w;
+        for(var q=0;q<cols.length;q++){
+          var p=Q(cols[q],0), arch=F.arch?ww*0.5:0;
+          archFace(M,p[0],p[1],dx,dz,nx*0.06,nz*0.06,F.y-0.24,ww+0.56,F.h+(arch?0.24:0.48),arch?(ww+0.56)*0.5:0,o.trim,1);
+          archFace(M,p[0],p[1],dx,dz,nx*0.11,nz*0.11,F.y,ww,F.h,arch,o.glass,1);
+          archFace(M,p[0],p[1],dx,dz,nx*0.13,nz*0.13,F.y,0.09,F.h+arch*0.9,0,o.mull||o.trim,0.95);
+          archFace(M,p[0],p[1],dx,dz,nx*0.13,nz*0.13,F.y+F.h*0.64,ww,0.09,0,o.mull||o.trim,0.95);
+        }
+        if(!F.noSill) box(uc-w*0.5-0.34,uc+w*0.5+0.34,-0.02,0.24,F.y-0.40,F.y-0.20,o.trim,0.8);
+      }
+    }
+  }
+}
+/* the Romanesque corbel table: a row of little round arches under the eaves */
+function lombardBand(M,s,y,col,wallCol,pitch){
+  var n=s.length; pitch=pitch||1.25;
+  for(var i=0;i<n;i++){
+    var a=s[i], b=s[(i+1)%n];
+    var dx=b[0]-a[0], dz=b[1]-a[1], L=Math.hypot(dx,dz);
+    if(L<2.2) continue;
+    dx/=L; dz/=L;
+    var nx=dz, nz=-dx, cnt=Math.max(1,Math.floor(L/pitch)), g=L/cnt;
+    archFace(M,a[0]+dx*L*0.5,a[1]+dz*L*0.5,dx,dz,nx*0.05,nz*0.05,y+0.42,L,0.30,0,col,0.9);
+    for(var k=0;k<cnt;k++){
+      var u=(k+0.5)*g, px=a[0]+dx*u, pz=a[1]+dz*u;
+      archFace(M,px,pz,dx,dz,nx*0.07,nz*0.07,y,g*0.86,0.02,g*0.43,col,1);
+      archFace(M,px,pz,dx,dz,nx*0.10,nz*0.10,y-0.02,g*0.56,0.02,g*0.26,wallCol,0.72);
+      archFace(M,a[0]+dx*k*g,a[1]+dz*k*g,dx,dz,nx*0.09,nz*0.09,y-0.34,0.20,0.36,0,col,0.85);
+    }
+  }
+}
+/* the longest wall whose outward face looks toward (tx,tz) */
+function wallFacing(s,tx,tz,minL){
+  var best=null, bl=0, n=s.length;
+  for(var i=0;i<n;i++){
+    var a=s[i], b=s[(i+1)%n], L=Math.hypot(b[0]-a[0],b[1]-a[1]);
+    if(L<(minL||8)) continue;
+    var dx=(b[0]-a[0])/L, dz=(b[1]-a[1])/L, mx=(a[0]+b[0])*0.5, mz=(a[1]+b[1])*0.5;
+    var vx=tx-mx, vz=tz-mz, vl=Math.hypot(vx,vz)||1;
+    if((dz*vx-dx*vz)/vl<0.72) continue;
+    if(L>bl){ bl=L; best={x:mx,z:mz,dx:dx,dz:dz,nx:dz,nz:-dx,L:L}; }
+  }
+  return best||faceToward(s,tx,tz);
+}
+/* a local frame on a wall: u runs along it, v out from it */
+function wallKit(M,F){
+  var K={};
+  K.P=function(u,v){ return [F.x+F.dx*u+F.nx*v, F.z+F.dz*u+F.nz*v]; };
+  K.box=function(u0,u1,v0,v1,y0,y1,col,sh){
+    var r=[K.P(u0,v0),K.P(u1,v0),K.P(u1,v1),K.P(u0,v1)]; if(ringArea(r)<0) r.reverse();
+    prism(M,r,y0,y1,col,col,sh===undefined?0.66:sh); return r; };
+  K.face=function(u,v,y0,w,hs,ha,col,sh){
+    var p=K.P(u,v); archFace(M,p[0],p[1],F.dx,F.dz,0,0,y0,w,hs,ha,col,sh===undefined?1:sh); };
+  /* gable wall facing +v at depth v, plus its back */
+  K.gable=function(u0,u1,v,y0,y1,col){
+    var l=K.P(u0,v), r=K.P(u1,v), m=K.P((u0+u1)*0.5,v), c=rgb(col,1), cd=rgb(col,0.7);
+    M.tri([l[0],y0,l[1]],[r[0],y0,r[1]],[m[0],y1,m[1]],c,c,c);
+    M.tri([r[0],y0,r[1]],[l[0],y0,l[1]],[m[0],y1,m[1]],cd,cd,cd); };
+  /* pitched roof over u0..u1 running from v0 back to v1 */
+  K.roof=function(u0,u1,v0,v1,y0,y1,col,colD){
+    var um=(u0+u1)*0.5, ct=rgb(col,1), cu=rgb(colD,0.7);
+    for(var sd=0;sd<2;sd++){
+      var ue=sd?u1:u0;
+      var e0=K.P(ue,v0), e1=K.P(ue,v1), r0=K.P(um,v0), r1=K.P(um,v1);
+      var A=[e0[0],y0,e0[1]], B=[r0[0],y1,r0[1]], C=[r1[0],y1,r1[1]], D=[e1[0],y0,e1[1]];
+      var ax=B[0]-A[0],ay=B[1]-A[1],az=B[2]-A[2], bx=D[0]-A[0],by=D[1]-A[1],bz=D[2]-A[2];
+      var up=az*bx-ax*bz;
+      if(up>=0) M.quad(A,B,C,D,ct,ct,ct,ct); else M.quad(A,D,C,B,ct,ct,ct,ct);
+      var A2=[A[0],A[1]-0.22,A[2]], B2=[B[0],B[1]-0.22,B[2]], C2=[C[0],C[1]-0.22,C[2]], D2=[D[0],D[1]-0.22,D[2]];
+      if(up>=0) M.quad(A2,D2,C2,B2,cu,cu,cu,cu); else M.quad(A2,B2,C2,D2,cu,cu,cu,cu);
+    }
+  };
+  K.disc=function(u,v,y,r,col,seg){
+    var p=K.P(u,v), m=new T.Mesh(new T.CircleGeometry(r,seg||18),new T.MeshLambertMaterial({color:col}));
+    m.position.set(p[0],y,p[1]); m.rotation.y=Math.atan2(F.nx,F.nz); scene.add(m); return m; };
+  return K;
+}
+
+/* ---------- Thomas and Dorothy Leavey Library (1994) ----------
+   Postmodern Romanesque in the campus brick: three storeys of regular
+   pilastered bays in cast stone trim under a red tile roof, and a tall
+   gabled gateway pavilion with a great arched window facing McCarthy Quad
+   and the long reflecting pool. */
+CUSTOM['Leavey Library']=function(M,B,ring,c,d){
+  var h=15.6, brick=0xA64A32, brickD=0x8E3F2B, cast=0xE2D7BF, castD=0xC4B79B,
+      tile=0xB0502F, tileD=0x8A3C24, glass=0x2E3B45;
+  var s=simplifyRing(ring,1.0);
+  prism(M,s,0,h,brick,brick,0.55);
+  band(M,s,0,1.15,0.22,cast,1,0.70);
+  band(M,s,5.05,5.45,0.30,cast,1,0.78,true);
+  band(M,s,10.15,10.45,0.30,cast,1,0.78,true);
+  bayFacade(M,s,{bay:4.4,pil:0.95,pilD:0.24,pilY0:1.15,pilY1:h-1.1,pilCol:brickD,trim:cast,glass:glass,mull:castD,
+    floors:[{y:1.75,h:2.35,w:2.1,arch:1},{y:6.2,h:2.7,w:2.0},{y:11.05,h:2.5,w:2.0}]});
+  band(M,s,h-1.1,h-0.55,0.30,castD,0.9,0.62,true);
+  band(M,s,h-0.55,h+0.05,0.44,cast,1,0.80,true);
+  var e2=offsetRing(simplifyRing(s,3.0),0.9);
+  band(M,e2,h,h+0.35,0,tileD,0.85,0.55);
+  var rise=Math.max(3.0,Math.min(5.2,d.min*0.20));
+  hipRoof(M,e2,h+0.35,rise,Math.min(rise*1.15,d.min*0.30),tile);
+
+  /* the gateway pavilion, on the axis of the reflecting pool */
+  var pc=[237,-94];
+  for(var wi=0;wi<WATER.length;wi++){ var wc=centroid(WATER[wi]);
+    if(Math.hypot(wc[0]-c[0],wc[1]-c[1])<70){ pc=wc; break; } }
+  var F=wallFacing(s,pc[0],pc[1],14);
+  if(F){
+    var K=wallKit(M,F);
+    var uc=(pc[0]-F.x)*F.dx+(pc[1]-F.z)*F.dz;
+    uc=Math.max(-F.L*0.5+9.5,Math.min(F.L*0.5-9.5,uc));
+    var Pw=8.2, back=-8, fr=2.6, HT=21.6, AP=27.4;
+    var pav=K.box(uc-Pw,uc+Pw,back,fr,0,HT,brick,0.56);
+    K.box(uc-Pw-0.2,uc+Pw+0.2,back,fr+0.2,0,1.15,cast,0.70);
+    K.box(uc-Pw-0.08,uc+Pw+0.08,back,fr+0.1,5.05,5.45,cast,0.78);
+    K.box(uc-Pw-0.08,uc+Pw+0.08,back,fr+0.1,10.15,10.45,cast,0.78);
+    /* cast stone piers at the corners, capped above the cornice */
+    for(var sd=-1;sd<=1;sd+=2){
+      var pu=uc+sd*(Pw-0.7);
+      K.box(pu-0.95,pu+0.95,fr-1.2,fr+0.55,0,HT+1.3,cast,0.70);
+      K.box(pu-1.15,pu+1.15,fr-1.4,fr+0.75,HT+1.3,HT+1.75,castD,0.8);
+      for(var qy=1.6;qy<HT;qy+=1.9) K.box(pu-1.05,pu+1.05,fr-1.3,fr+0.62,qy,qy+0.45,castD,0.72);
+      var tq=K.P(pu,fr-0.3);
+      coneRoof(M,tq[0],tq[1],1.0,HT+1.75,1.8,tile,4);
+    }
+    /* the great arched window: stone archivolt, glazing in a stone grid */
+    var gw=8.4, gs=10.6, ga=gw*0.5;
+    K.face(uc,fr+0.02,0.0,gw+1.7,gs+0.3,ga+0.85,castD,1);
+    K.face(uc,fr+0.05,0.0,gw+0.8,gs+0.15,ga+0.40,cast,1);
+    K.face(uc,fr+0.08,0.0,gw,gs,ga,glass,1);
+    for(var mu=-1;mu<=1;mu++) K.face(uc+mu*gw/4,fr+0.11,3.4,0.18,gs-3.4+ga*(mu?0.72:1),0,cast,0.95);
+    for(var ty=3.4;ty<gs+0.1;ty+=3.6) K.face(uc,fr+0.11,ty,gw,0.18,0,cast,0.95);
+    K.face(uc,fr+0.11,gs+ga*0.55,gw*0.84,0.16,0,cast,0.95);
+    /* glass doors under a bronze canopy */
+    K.face(uc,fr+0.12,0.0,5.4,3.3,0,0x1B2329,1);
+    for(var du=-1;du<=1;du++) K.face(uc+du*1.8,fr+0.14,0,0.14,3.3,0,0x6B5A3E,1);
+    K.box(uc-3.6,uc+3.6,fr,fr+2.4,3.35,3.7,0x6B5A3E,0.8);
+    /* keystone, name panel, cornice */
+    K.box(uc-0.55,uc+0.55,fr,fr+0.22,gs+ga+0.2,gs+ga+1.3,castD,0.8);
+    K.box(uc-6.2,uc+6.2,fr,fr+0.12,HT-4.1,HT-2.9,cast,0.82);
+    var tp=K.P(uc,fr+0.14);
+    facadeText('LEAVEY LIBRARY',tp[0],tp[1],F.nx,F.nz,HT-3.5,10.5,0.95,'#5A4A38');
+    K.box(uc-Pw-0.3,uc+Pw+0.3,back,fr+0.35,HT-1.3,HT-0.7,castD,0.62);
+    K.box(uc-Pw-0.45,uc+Pw+0.45,back,fr+0.5,HT-0.7,HT,cast,0.80);
+    /* the gable: brick field, stone coping on the rakes, an oculus */
+    K.gable(uc-Pw-0.2,uc+Pw+0.2,fr+0.02,HT,AP,brick);
+    for(var sd2=-1;sd2<=1;sd2+=2){
+      var re=K.P(uc+sd2*(Pw+0.45),fr+0.4), ap=K.P(uc,fr+0.4);
+      segBox(M,re,ap,HT,HT+0.1,0.2,cast,0.8);
+    }
+    var ri=K.P(uc+(Pw+0.45),fr+0.35), le=K.P(uc-(Pw+0.45),fr+0.35), apx=K.P(uc,fr+0.35);
+    var cc=rgb(cast,1);
+    for(var t2=0;t2<2;t2++){
+      var E=t2?ri:le;
+      var A1=[E[0],HT+0.1,E[1]], A2=[apx[0],AP+0.35,apx[1]];
+      M.quad(A1,[A1[0],A1[1]+0.55,A1[2]],[A2[0],A2[1]+0.55,A2[2]],A2,cc,cc,cc,cc);
+      M.quad(A2,[A2[0],A2[1]+0.55,A2[2]],[A1[0],A1[1]+0.55,A1[2]],A1,cc,cc,cc,cc);
+    }
+    K.disc(uc,fr+0.04,HT+2.55,1.35,cast,20);
+    K.disc(uc,fr+0.07,HT+2.55,0.95,glass,20);
+    K.roof(uc-Pw-0.6,uc+Pw+0.6,fr+0.6,back,HT+0.05,AP+0.3,tile,tileD);
+    addCollider(pav,HT);
+    /* keep the forecourt open between the doors and the pool */
+    var fc=K.P(uc,fr+9);
+    B.noPlant=[oriRect(fc[0],fc[1],F.dx,F.dz,Pw+14,10)];
+    /* lanterns on the piers */
+    for(var ls=-1;ls<=1;ls+=2){
+      var lp=K.P(uc+ls*(Pw-0.7),fr+0.8);
+      var lan=new T.Mesh(new T.CylinderGeometry(0.24,0.17,0.7,6),new T.MeshLambertMaterial({color:0xE9C27A,emissive:0x5a3a10}));
+      lan.position.set(lp[0],3.6,lp[1]); scene.add(lan);
+    }
+  }
+  addCollider(ring,h);
+  return h;
+};
+
+/* ---------- Edward L. Doheny Jr. Memorial Library (1932) ----------
+   Italian Romanesque in pale rose brick and limestone. The west front faces
+   Alumni Park (it is the backdrop for commencement): a tall gabled centre
+   block with three great arched windows over a limestone entrance porch,
+   Shakespeare and Dante in niches either side of the bronze doors, and
+   long wings of round-arched reading room windows under a corbel table
+   and red tile roofs. */
+CUSTOM['Doheny Memorial Library']=function(M,B,ring,c,d){
+  var h=17.6, brick=0xC4876A, brickD=0xB27A5E, lime=0xE6DCC6, limeD=0xC9BCA2,
+      tile=0xB4553A, tileD=0x8E4128, glass=0x2F3A40, stain=0x3C4A66;
+  var s=simplifyRing(ring,1.0);
+  prism(M,s,0,h,brick,brick,0.55);
+  band(M,s,0,1.4,0.24,lime,1,0.70);
+  band(M,s,5.3,5.8,0.26,lime,1,0.78,true);
+  bayFacade(M,s,{bay:5.0,pil:0.9,pilD:0.22,pilY0:1.4,pilY1:h-2.2,pilCol:brickD,trim:lime,glass:glass,mull:limeD,
+    floors:[{y:2.1,h:2.3,w:1.8},{y:6.6,h:4.0,w:2.5,arch:1},{y:13.0,h:1.35,w:2.1,pair:1,noSill:1}]});
+  lombardBand(M,s,h-1.75,lime,brick,1.2);
+  band(M,s,h-0.85,h,0.36,lime,1,0.78,true);
+  var e2=offsetRing(simplifyRing(s,2.6),0.9);
+  band(M,e2,h,h+0.4,0,tileD,0.85,0.55);
+  var rise=Math.max(3.0,Math.min(5.8,d.min*0.20));
+  hipRoof(M,e2,h+0.4,rise,Math.min(rise*1.15,d.min*0.30),tile);
+
+  var F=wallFacing(s,80,5,20);
+  if(F){
+    var K=wallKit(M,F);
+    var Cw=9.6, back=-30, fr=0.4, HT=25.0, AP=31.8;
+    /* the tall centre block */
+    var cb=K.box(-Cw,Cw,back,fr,0,HT,brick,0.56);
+    K.box(-Cw-0.2,Cw+0.2,back,fr+0.2,0,1.4,lime,0.70);
+    for(var sd=-1;sd<=1;sd+=2){           /* limestone quoins up the corners */
+      for(var qy=1.4,qk=0;qy<HT-1.2;qy+=0.9,qk++){
+        var qw=(qk%2)?0.9:1.5;
+        K.box(sd>0?Cw-qw:-Cw-0.06,sd>0?Cw+0.06:-Cw+qw,fr-0.02,fr+0.08,qy,qy+0.62,lime,0.78);
+      }
+    }
+    /* three great arched windows, stained glass in stone tracery */
+    for(var w=-1;w<=1;w++){
+      var wu=w*4.6;
+      K.face(wu,fr+0.03,13.2,3.7,6.2,1.85,limeD,1);
+      K.face(wu,fr+0.06,13.45,3.0,5.9,1.5,stain,1);
+      K.face(wu,fr+0.09,13.45,0.12,7.2,0,lime,0.95);
+      K.face(wu,fr+0.09,16.4,3.0,0.12,0,lime,0.95);
+      K.face(wu,fr+0.09,19.35,3.0,0.12,0,lime,0.95);
+      K.box(wu-2.0,wu+2.0,fr,fr+0.34,12.75,13.15,lime,0.8);
+    }
+    /* the corbel table and cornice along the front of the block */
+    var lr=[K.P(-Cw,fr),K.P(Cw,fr),K.P(Cw,back),K.P(-Cw,back)]; if(ringArea(lr)<0) lr.reverse();
+    lombardBand(M,lr,HT-1.9,lime,brick,1.2);
+    K.box(-Cw-0.3,Cw+0.3,back,fr+0.35,HT-0.9,HT,lime,0.80);
+    /* gable with its raked corbel arcade and a round window */
+    K.gable(-Cw-0.3,Cw+0.3,fr+0.02,HT,AP,brick);
+    K.gable(-Cw-0.3,Cw+0.3,back-0.02,HT,AP,brick);
+    var NS=10;
+    for(var sd2=-1;sd2<=1;sd2+=2){
+      for(var q=0;q<NS;q++){
+        var t=(q+0.5)/NS, uu=sd2*(Cw+0.3)*(1-t), yy=HT+(AP-HT)*t;
+        var cp=K.P(uu,fr+0.12);
+        archFace(M,cp[0],cp[1],F.dx,F.dz,0,0,yy-0.9,0.8,0.3,0.4,lime,1);
+      }
+      segBox(M,K.P(sd2*(Cw+0.4),fr+0.3),K.P(0,fr+0.3),HT,HT+0.12,0.3,lime,0.8);
+    }
+    for(var t3=0;t3<2;t3++){
+      var E=K.P((t3?1:-1)*(Cw+0.5),fr+0.3), A=K.P(0,fr+0.3), cc=rgb(lime,1);
+      var A1=[E[0],HT+0.1,E[1]], A2=[A[0],AP+0.4,A[1]];
+      M.quad(A1,[A1[0],A1[1]+0.6,A1[2]],[A2[0],A2[1]+0.6,A2[2]],A2,cc,cc,cc,cc);
+      M.quad(A2,[A2[0],A2[1]+0.6,A2[2]],[A1[0],A1[1]+0.6,A1[2]],A1,cc,cc,cc,cc);
+    }
+    K.disc(0,fr+0.04,HT+2.9,1.45,lime,22);
+    K.disc(0,fr+0.07,HT+2.9,1.0,stain,22);
+    K.roof(-Cw-0.7,Cw+0.7,fr+0.7,back-0.7,HT-0.05,AP+0.3,tile,tileD);
+    addCollider(cb,HT);
+
+    /* the limestone entrance porch */
+    var Pw=7.0, pd=4.2, PH=12.0;
+    var por=K.box(-Pw,Pw,fr-0.2,pd,0,PH,lime,0.66);
+    K.box(-Pw-0.25,Pw+0.25,fr-0.2,pd+0.25,0,0.9,limeD,0.70);
+    for(var bb=-1;bb<=1;bb+=2) K.box(bb*Pw-0.75,bb*Pw+0.75,pd-0.6,pd+0.35,0,PH+0.4,limeD,0.72);
+    /* the deep moulded portal and the bronze doors */
+    K.face(0,pd+0.02,0.9,7.4,4.9,3.7,limeD,1);
+    K.face(0,pd+0.05,0.9,6.4,4.9,3.2,0xD5C9AF,1);
+    K.face(0,pd+0.08,0.9,5.2,4.9,2.6,0x241E1A,1);
+    K.face(0,pd+0.11,0.9,4.4,4.5,0,0x7A5A34,1);
+    K.face(0,pd+0.13,0.9,0.12,4.5,0,0x4E3A22,1);
+    for(var dp=0;dp<3;dp++) K.face(0,pd+0.13,1.8+dp*1.3,4.4,0.1,0,0x4E3A22,1);
+    /* relief of The Learners over the arch, and the inscription */
+    K.box(-3.4,3.4,pd,pd+0.14,9.9,11.6,limeD,0.78);
+    K.face(-1.3,pd+0.16,10.1,0.7,1.1,0.35,0xB9AC91,1);
+    K.face(1.3,pd+0.16,10.1,0.7,1.1,0.35,0xB9AC91,1);
+    K.face(0,pd+0.16,10.4,1.4,0.6,0.7,0xA89A7E,1);
+    var ip=K.P(0,pd+0.17);
+    facadeText('WISE MEN LAY UP KNOWLEDGE',ip[0],ip[1],F.nx,F.nz,9.45,7.6,0.5,'#6A5A42');
+    /* Shakespeare and Dante in their niches */
+    var stoneM=new T.MeshLambertMaterial({color:0xD2C6AC,flatShading:true});
+    for(var ns=-1;ns<=1;ns+=2){
+      var nu=ns*5.0;
+      K.face(nu,pd+0.03,2.3,1.7,2.9,0.85,0x8C7F68,1);
+      K.box(nu-0.8,nu+0.8,pd,pd+0.5,1.8,2.3,limeD,0.8);
+      var sp=K.P(nu,pd+0.3);
+      var body=new T.Mesh(new T.CylinderGeometry(0.30,0.42,2.1,7),stoneM);
+      body.position.set(sp[0],3.35,sp[1]); scene.add(body);
+      var head=new T.Mesh(new T.SphereGeometry(0.2,7,5),stoneM);
+      head.position.set(sp[0],4.6,sp[1]); scene.add(head);
+    }
+    /* cresting along the porch top */
+    K.box(-Pw-0.2,Pw+0.2,fr-0.2,pd+0.2,PH,PH+0.35,limeD,0.8);
+    for(var cu=-Pw+0.4;cu<=Pw-0.3;cu+=0.95) K.box(cu-0.2,cu+0.2,pd-0.1,pd+0.15,PH+0.35,PH+1.05,lime,0.8);
+    addCollider(por,PH);
+    /* lanterns either side of the doors */
+    for(var ls=-1;ls<=1;ls+=2){
+      var lp=K.P(ls*3.4,pd+0.45);
+      var lan=new T.Mesh(new T.CylinderGeometry(0.22,0.15,0.65,6),new T.MeshLambertMaterial({color:0xE9C27A,emissive:0x5a3a10}));
+      lan.position.set(lp[0],4.7,lp[1]); scene.add(lan);
+    }
+    /* keep the forecourt open so the front can be seen from the park */
+    var fc=K.P(0,pd+11);
+    B.noPlant=[oriRect(fc[0],fc[1],F.dx,F.dz,17,11)];
+  }
+  addCollider(ring,h);
+  return h;
+};
+
+/* ---- ground base ----
+   Far away it is one plain sheet. Across campus it is a finer grid whose
+   vertex colour blends from street concrete into lawn wherever USC buildings
+   are close, so the spaces between buildings read as planted grounds rather
+   than a car park. The Coliseum's sunken bowl is cut out of both. */
+var LAWN_MASK=null, LG={x0:-720,z0:-820,x1:800,z1:900,c:8};
+var PLAZAS=[
+  /* Hahn Plaza: Tommy Trojan, the fountain and Traveler */
+  [[-14,-10],[22,-24],[54,20],[52,64],[30,78],[4,60],[-16,22]],
+  /* the Campus Center terrace */
+  (function(){ var r=[]; for(var i=0;i<18;i++){ var a=i/18*6.2832; r.push([-77+Math.cos(a)*21,50+Math.sin(a)*21]); } return r; })(),
+  /* USC Village plaza */
+  [[-40,-530],[24,-552],[60,-532],[92,-528],[84,-505],[62,-468],[45,-472],[0,-498]]
+];
+PLAZAS.forEach(function(r){ if(ringArea(r)<0) r.reverse(); });
+function inPlaza(x,z){ for(var i=0;i<PLAZAS.length;i++) if(inRing(PLAZAS[i],x,z)) return true; return false; }
+(function(){
+  var W=4200, R=[LG.x0,LG.z0,LG.x1,LG.z1];
+  /* the far sheet, with the campus rectangle left open */
+  var outer=[[-W/2,-W/2],[W/2,-W/2],[W/2,W/2],[-W/2,W/2]],
+      hole=[[R[0],R[1]],[R[2],R[1]],[R[2],R[3]],[R[0],R[3]]];
+  var Mf=new Mesher();
+  flatHoled(Mf,outer,[hole],0,C_BASE,0.96);
+  var far=new T.Mesh(Mf.geom(),new T.MeshLambertMaterial({vertexColors:true,flatShading:true}));
+  far.position.y=-0.07; scene.add(far);
+
+  /* distance from each grid vertex to the nearest USC building */
+  var nx=Math.round((LG.x1-LG.x0)/LG.c), nz=Math.round((LG.z1-LG.z0)/LG.c);
+  var EH={}, EC=40;
+  for(var b=0;b<CAMPUS.length;b++){
+    var r=CAMPUS[b].ring;
+    for(var e=0;e<r.length;e++){
+      var a=r[e], q=r[(e+1)%r.length];
+      var c0=Math.floor((Math.min(a[0],q[0])-EC)/EC), c1=Math.floor((Math.max(a[0],q[0])+EC)/EC),
+          d0=Math.floor((Math.min(a[1],q[1])-EC)/EC), d1=Math.floor((Math.max(a[1],q[1])+EC)/EC);
+      for(var cx=c0;cx<=c1;cx++) for(var cz=d0;cz<=d1;cz++){
+        var k=cx+'_'+cz; (EH[k]||(EH[k]=[])).push([a[0],a[1],q[0],q[1]]);
+      }
+    }
+  }
+  function dist(x,z){
+    var l=EH[Math.floor(x/EC)+'_'+Math.floor(z/EC)], best=1e9;
+    if(!l) return best;
+    for(var i=0;i<l.length;i++){
+      var s2=l[i], dx=s2[2]-s2[0], dz=s2[3]-s2[1], L2=dx*dx+dz*dz||1e-9;
+      var t=((x-s2[0])*dx+(z-s2[1])*dz)/L2; t=t<0?0:(t>1?1:t);
+      var qx=s2[0]+dx*t-x, qz=s2[1]+dz*t-z, d=qx*qx+qz*qz;
+      if(d<best) best=d;
+    }
+    return Math.sqrt(best);
+  }
+  LAWN_MASK=new Float32Array((nx+1)*(nz+1));
+  var cBase=new T.Color(C_BASE), cL1=new T.Color(0x4C8534), cL2=new T.Color(0x62923D),
+      cDry=new T.Color(0x9A9A6A), cc=new T.Color(), ct=new T.Color();
+  var col=new Float32Array((nx+1)*(nz+1)*3);
+  for(var j=0;j<=nz;j++) for(var i=0;i<=nx;i++){
+    var x=LG.x0+i*LG.c, z=LG.z0+j*LG.c, d=dist(x,z);
+    var m=d<20?1:(d>40?0:1-(d-20)/20); m=m*m*(3-2*m);
+    LAWN_MASK[j*(nx+1)+i]=m;
+    var n1=Math.sin(x*0.043+Math.cos(z*0.021)*2.1)*Math.cos(z*0.037-x*0.011);
+    var n2=Math.sin(x*0.19+z*0.13)*Math.sin(z*0.23-x*0.07);
+    var bv=0.90+0.08*n1+0.03*n2;
+    cc.copy(cBase).multiplyScalar(bv);
+    ct.copy(cL1).lerp(cL2,0.5+0.5*n1).multiplyScalar(0.94+0.06*n2);
+    if(n1<-0.55) ct.lerp(cDry,(-n1-0.55)*0.6);
+    cc.lerp(ct,m);
+    col[(j*(nx+1)+i)*3]=cc.r; col[(j*(nx+1)+i)*3+1]=cc.g; col[(j*(nx+1)+i)*3+2]=cc.b;
+  }
+  var P=[],N=[],C=[];
+  function V(i,j){ var k=j*(nx+1)+i; P.push(LG.x0+i*LG.c,0,LG.z0+j*LG.c); N.push(0,1,0);
+    C.push(col[k*3],col[k*3+1],col[k*3+2]); }
+  for(j=0;j<nz;j++) for(i=0;i<nx;i++){
+    var x0=LG.x0+i*LG.c, z0=LG.z0+j*LG.c, x1=x0+LG.c, z1=z0+LG.c;
+    if(inColHole(x0,z0)&&inColHole(x1,z0)&&inColHole(x0,z1)&&inColHole(x1,z1)) continue;
+    V(i,j); V(i,j+1); V(i+1,j);  V(i+1,j); V(i,j+1); V(i+1,j+1);
+  }
+  var g=new T.BufferGeometry();
+  g.setAttribute('position',new T.Float32BufferAttribute(P,3));
+  g.setAttribute('normal',new T.Float32BufferAttribute(N,3));
+  g.setAttribute('color',new T.Float32BufferAttribute(C,3));
+  g.computeBoundingSphere();
+  var mesh=new T.Mesh(g,new T.MeshLambertMaterial({vertexColors:true}));
+  mesh.position.y=-0.07; mesh.receiveShadow=true; scene.add(mesh);
+  GROUND_MESHES.push(mesh,far);
 })();
+function lawnAt(x,z){
+  if(!LAWN_MASK) return 0;
+  var nx=Math.round((LG.x1-LG.x0)/LG.c);
+  var i=Math.round((x-LG.x0)/LG.c), j=Math.round((z-LG.z0)/LG.c);
+  if(i<0||j<0||i>nx||j>Math.round((LG.z1-LG.z0)/LG.c)) return 0;
+  return LAWN_MASK[j*(nx+1)+i];
+}
 
 /* ---- green areas, water, roads, paths (one merged ground mesh) ---- */
 var NAMED_PLACES=[];
@@ -5219,12 +5883,38 @@ var NAMED_PLACES=[];
   var M=new Mesher();
   for(var i=0;i<AREAS.length;i++){
     var a=AREAS[i];
-    flat(M,a.ring,0.02, a.k==='p'?C_PITCH:(a.k==='w'?0x3F7A32:C_GRASS), a.k==='g'?rr(0.92,1.06):1);
+    var acol=a.k==='p'?C_PITCH:(a.k==='w'?0x3F7A32:C_GRASS), ash=a.k==='g'?rr(0.92,1.06):1;
+    if(ringHasHole(a.ring)) flatHoled(M,a.ring,[COL_HOLE],0.02,acol,ash);
+    else flat(M,a.ring,0.02,acol,ash);
   }
   for(i=0;i<PARKS.length;i++){
-    flat(M,PARKS[i].ring,0.03,C_GRASS,rr(0.94,1.04));
+    if(ringHasHole(PARKS[i].ring)) flatHoled(M,PARKS[i].ring,[COL_HOLE],0.03,C_GRASS,rr(0.94,1.04));
+    else flat(M,PARKS[i].ring,0.03,C_GRASS,rr(0.94,1.04));
     var ctr=centroid(PARKS[i].ring);
     NAMED_PLACES.push({name:PARKS[i].name,x:ctr[0],z:ctr[1],park:true});
+  }
+  /* paved plazas: warm concrete inside a brick band */
+  for(i=0;i<PLAZAS.length;i++){
+    var pl=PLAZAS[i], plo=pl.slice(); plo.push(pl[0]);
+    flat(M,pl,0.036,0xB1AB9D,1);
+    ribbon(M,plo,1.2,0.040,0x8F4E3C,0.95);
+    /* brick bands scoring the paving on the campus grid */
+    var gu=[0.883,0.469], gv=[-0.469,0.883];
+    for(var ax=0;ax<2;ax++){
+      var dA=ax?gv:gu, dB=ax?gu:gv;
+      for(var off=-120;off<=120;off+=7.5){
+        var run=null;
+        for(var tt=-120;tt<=120;tt+=1){
+          var bx=dB[0]*off+dA[0]*tt+15, bz=dB[1]*off+dA[1]*tt+25;
+          if(pl===PLAZAS[1]){ bx+=-92; bz+=25; }
+          if(pl===PLAZAS[2]){ bx+=10; bz+=-535; }
+          var ins=inRing(pl,bx,bz)&&inRing(pl,bx+dB[0]*1.3,bz+dB[1]*1.3)&&inRing(pl,bx-dB[0]*1.3,bz-dB[1]*1.3);
+          if(ins){ if(!run) run=[[bx,bz],[bx,bz]]; else run[1]=[bx,bz]; }
+          else if(run){ if(Math.hypot(run[1][0]-run[0][0],run[1][1]-run[0][1])>2) ribbon(M,run,0.35,0.039,0xA48878,0.95); run=null; }
+        }
+        if(run&&Math.hypot(run[1][0]-run[0][0],run[1][1]-run[0][1])>2) ribbon(M,run,0.35,0.039,0xA48878,0.95);
+      }
+    }
   }
   for(i=0;i<WATER.length;i++) flat(M,WATER[i],0.08,C_WATER,1);
   for(i=0;i<ROADS.length;i++){
@@ -5234,15 +5924,15 @@ var NAMED_PLACES=[];
   /* ---- the walks, built the way USC actually lays them:
      a scored concrete centre inside a running-bond brick border, with a
      darker soldier course at the outer edge ---- */
-  var C_BRK=0x9E4A35, C_WALK=0xC5BFAE;
+  var C_BRK=0x8F4E3C, C_WALK=0xC8C2B2;
   function walkway(M,pts,cw,bw,sh){
     ribbon(M,pts,cw+bw*2,0.100,C_BRK,sh);     /* the brick border */
     ribbon(M,pts,cw,0.132,C_WALK,sh);         /* the plain concrete centre */
   }
   for(i=0;i<PATHS.length;i++){
     var pw=PATHS[i].w, sh=0.95+((i*37)%9)*0.012;
-    if(pw>6)        walkway(M,PATHS[i].pts,pw*1.5,2.35,sh);
-    else if(pw>=2.5) walkway(M,PATHS[i].pts,pw*1.3,1.15,sh);
+    if(pw>6)        walkway(M,PATHS[i].pts,pw*1.5+2.3,1.2,sh);
+    else if(pw>=2.5) walkway(M,PATHS[i].pts,pw*1.3+1.0,0.62,sh);
     else            ribbon(M,PATHS[i].pts,pw*1.2,0.10,C_PATH,sh);
   }
   var mesh=new T.Mesh(M.geom(),matGround);
@@ -5368,21 +6058,6 @@ function innerPoint(ring){
     if(st!=='d'&&d.min>9&&(i%10)<7){
       var hedge=offsetRing(simplifyRing(ring,2.6),1.9);
       band(M,hedge,0,0.66,0,0x3C6B33,1,0.62);
-    }
-
-    /* Doheny's cast stone entrance pavilion, facing the park */
-    if(B.name==='Doheny Memorial Library'){
-      var ux=-c[0], uz=-c[1], uL=Math.hypot(ux,uz)||1; ux/=uL; uz/=uL;
-      var rr2=reach(ring,c[0],c[1],ux,uz);
-      var fx=c[0]+ux*(rr2-6.5), fz=c[1]+uz*(rr2-6.5);
-      var pxv=-uz, pzv=ux, hwv=11.5, dpv=7.0;
-      var pav=[[fx+pxv*hwv-ux*dpv,fz+pzv*hwv-uz*dpv],[fx-pxv*hwv-ux*dpv,fz-pzv*hwv-uz*dpv],
-               [fx-pxv*hwv+ux*dpv,fz-pzv*hwv+uz*dpv],[fx+pxv*hwv+ux*dpv,fz+pzv*hwv+uz*dpv]];
-      if(ringArea(pav)<0) pav.reverse();
-      prism(M,pav,0,h+3.5,C_CAST,C_CAST_D,0.62);
-      band(M,pav,h+2.6,h+4.4,0.30,C_CAST,1,0.80);
-      archFace(M,fx+ux*dpv,fz+uz*dpv,pxv,pzv,ux*0.10,uz*0.10,0.4,7.4,7.0,3.7,0x2A2420,1);
-      addCollider(pav,h+3.5);
     }
 
     var colH=h;
@@ -5517,6 +6192,14 @@ function fountainRing(M,MG,ring,tiers,lift){
   flat(MG,inner,waterY,0x2C84C6,1);
   flat(MG,offsetRing(ring,-1.9),waterY-0.012,0x1D6EAA,1);
   addCollider(outer,wallH);
+  if(tiers===0){                                /* reflecting pool: a line of low jets */
+    var la=longAxisOf(ring), cnt=Math.max(2,Math.floor(la[2]/2.6));
+    for(i=0;i<cnt;i++){
+      var tt=(i+0.5)/cnt-0.5;
+      FOUNT_JETS.push([c[0]+la[0]*la[2]*0.84*tt, c[1]+la[1]*la[2]*0.84*tt, waterY+0.02, 1.0, 0.28]);
+    }
+    return;
+  }
   /* the pedestal and its bowls */
   if(R>=1.9){
     var pw=Math.max(0.55,R*0.17), bw=Math.max(1.05,R*0.46);
@@ -5557,6 +6240,7 @@ function fountainRing(M,MG,ring,tiers,lift){
 (function(){
   var M=new Mesher();
   for(var s=0;s<STADIA.length;s++){
+    if(STADIA[s].name==='Los Angeles Memorial Coliseum') continue;
     var ring=STADIA[s].ring;
     var ctr=centroid(ring), big=0;
     for(var i=0;i<ring.length;i++) big=Math.max(big,Math.hypot(ring[i][0]-ctr[0],ring[i][1]-ctr[1]));
@@ -5592,7 +6276,20 @@ function fountainRing(M,MG,ring,tiers,lift){
    These come straight from the OSM ways because the campus footprint
    list drops sports facilities.
    ================================================================== */
-var SPORT_PLACES=[], NO_PLANT=[];
+var SPORT_PLACES=[], NO_PLANT=[
+  [[COL.xp,COL.cz-52],[COL.xp+58,COL.cz-52],[COL.xp+58,COL.cz+52],[COL.xp,COL.cz+52]]
+];
+/* the libraries keep their walls and forecourts clear of trees */
+(function(){
+  for(var i=0;i<CAMPUS.length;i++){ var B=CAMPUS[i];
+    if(B.name!=='Leavey Library'&&B.name!=='Doheny Memorial Library') continue;
+    var o=offsetRing(simplifyRing(B.ring,2.5),B.name==='Leavey Library'?11:6.5);
+    if(o) NO_PLANT.push(o);
+    if(B.noPlant) for(var k=0;k<B.noPlant.length;k++) NO_PLANT.push(B.noPlant[k]);
+  }
+  for(i=0;i<WATER.length;i++){ var la=longAxisOf(WATER[i]), A=Math.abs(ringArea(WATER[i]));
+    if(la[2]>12&&A/la[2]<la[2]/3){ var ow=offsetRing(WATER[i],6); if(ow) NO_PLANT.push(ow); } }
+})();
 (function(){
   var FELIX=decode('-284,-146 -9,-6 -6,-8 -4,-10 0,-10 4,-10 6,-8 9,-6 10,-3 10,1 10,4 86,46 8,7 5,9 2,10 -1,11 -5,9 -8,7 -10,4 -10,1 -11,-3');
   var BRIT =decode('-272,-243 17,-33 78,41 -17,33');
@@ -6413,7 +7110,7 @@ var TREE_POS=[];
     return c;
   }
   function blocked(x,z){
-    if(onWalk(x,z)) return true;                 /* never in the middle of a walk */
+    if(onWalk(x,z)||inColHole(x,z)) return true;  /* never in the middle of a walk */
     for(var q=0;q<NO_PLANT.length;q++) if(insideRing(NO_PLANT[q],x,z)) return true;
     var k=gkey(Math.floor(x/CELL),Math.floor(z/CELL)), l=GRID[k];
     if(!l) return false;
@@ -6422,7 +7119,7 @@ var TREE_POS=[];
     return false;
   }
   for(var i=0;i<POINTS.length;i++)
-    if(POINTS[i].k==='t' && !onWalk(POINTS[i].x,POINTS[i].z)) TREE_POS.push([POINTS[i].x,POINTS[i].z,0]);
+    if(POINTS[i].k==='t' && !onWalk(POINTS[i].x,POINTS[i].z) && !blocked(POINTS[i].x,POINTS[i].z) && !inPlaza(POINTS[i].x,POINTS[i].z)) TREE_POS.push([POINTS[i].x,POINTS[i].z,0]);
   /* fill parks and grass polygons */
   var green=PARKS.map(function(p){return p.ring;});
   for(i=0;i<AREAS.length;i++) if(AREAS[i].k==='g'||AREAS[i].k==='w') green.push(AREAS[i].ring);
@@ -6437,42 +7134,7 @@ var TREE_POS=[];
       TREE_POS.push([x,z,rnd()<0.24?1:0]); t++;
     }
   }
-  /* build instanced trees */
-  var oaks=TREE_POS.filter(function(t){return !t[2];}), palms=TREE_POS.filter(function(t){return t[2];});
-  var trunkG=new T.CylinderGeometry(0.19,0.34,3.0,5); trunkG.translate(0,1.5,0);
-  var canopyG=new T.IcosahedronGeometry(1,0);
-  (function(){var n=canopyG.attributes.position.count,arr=new Float32Array(n*3);
-    for(var q=0;q<n*3;q++) arr[q]=1;
-    canopyG.setAttribute('color',new T.Float32BufferAttribute(arr,3));})();
-  var trunkM=new T.MeshLambertMaterial({color:0x6B4B32,flatShading:true});
-  var leafM =new T.MeshLambertMaterial({color:0x4E9B3E,flatShading:true,vertexColors:true});
-  var iT=new T.InstancedMesh(trunkG,trunkM,oaks.length);
-  var iC=new T.InstancedMesh(canopyG,leafM,oaks.length);
-  var dummy=new T.Object3D(), col=new T.Color();
-  for(i=0;i<oaks.length;i++){
-    var sc=rr(0.85,1.5);
-    dummy.position.set(oaks[i][0],0,oaks[i][1]); dummy.rotation.set(0,rr(0,6.28),0);
-    dummy.scale.set(sc,sc,sc); dummy.updateMatrix(); iT.setMatrixAt(i,dummy.matrix);
-    var cw=sc*rr(2.1,3.0);
-    dummy.position.y=3.0*sc+cw*0.42; dummy.scale.set(cw,cw*rr(0.78,1.05),cw*rr(0.85,1.1));
-    dummy.rotation.set(rr(-0.35,0.35),rr(0,6.28),rr(-0.35,0.35)); dummy.updateMatrix(); iC.setMatrixAt(i,dummy.matrix);
-    col.setHex(C_TREE[i%3]).multiplyScalar(rr(0.86,1.12)); iC.setColorAt(i,col);
-  }
-  iT.frustumCulled=false; iC.frustumCulled=false; scene.add(iT); scene.add(iC);
-  /* palms */
-  var pTrunk=new T.CylinderGeometry(0.22,0.42,10,6); pTrunk.translate(0,5,0);
-  var pM=new T.MeshLambertMaterial({color:0x8C7856,flatShading:true});
-  var frondG=new T.ConeGeometry(3.4,1.5,6); frondG.translate(0,0.2,0);
-  var fM=new T.MeshLambertMaterial({color:0x4C8F3C,flatShading:true});
-  var pT=new T.InstancedMesh(pTrunk,pM,palms.length),
-      pF=new T.InstancedMesh(frondG,fM,palms.length);
-  for(i=0;i<palms.length;i++){
-    var s3=rr(0.8,1.6);
-    dummy.rotation.set(0,rr(0,6.28),0); dummy.scale.set(1,s3,1);
-    dummy.position.set(palms[i][0],0,palms[i][1]); dummy.updateMatrix(); pT.setMatrixAt(i,dummy.matrix);
-    dummy.position.y=10*s3; dummy.scale.set(s3,s3,s3); dummy.updateMatrix(); pF.setMatrixAt(i,dummy.matrix);
-  }
-  pT.frustumCulled=false; pF.frustumCulled=false; scene.add(pT); scene.add(pF);
+  /* the trees themselves are built in the landscape pass, once everything is placed */
 })();
 
 /* ---- statues & monuments (Tommy Trojan gets the real treatment) ---- */
@@ -6625,6 +7287,7 @@ var TREE_POS=[];
     return false;
   }
   function blocked(x,z,pad){
+    if(inColHole(x,z)) return true;
     for(var q=0;q<NO_PLANT.length;q++) if(inRing(NO_PLANT[q],x,z)) return true;
     var l=nearby(x,z,pad||1.5);
     for(var i=0;i<l.length;i++){ var C=l[i];
@@ -6654,12 +7317,12 @@ var TREE_POS=[];
     var key=cx+'_'+cz; (this.g[key]||(this.g[key]=[])).push([x,z]);
     return true;
   };
-  var sLamp=new Spacer(26), sBench=new Spacer(34), sRack=new Spacer(52), sPalm=new Spacer(15);
+  var sLamp=new Spacer(18), sBench=new Spacer(22), sRack=new Spacer(52), sPalm=new Spacer(15);
 
   for(var i=0;i<PATHS.length;i++){
     var pts=PATHS[i].pts, w=PATHS[i].w;
     if(w<2.2) continue;
-    var lampGap = w>=6?34:58, benchGap = w>=6?70:150, rackGap=95;
+    var lampGap = w>=6?24:32, benchGap = w>=6?40:56, rackGap=95;
     var run=0;
     for(var s=0;s<pts.length-1;s++){
       var a=pts[s], b=pts[s+1];
@@ -6980,6 +7643,10 @@ var TREE_POS=[];
     if(A<6) continue;
     var cwq=centroid(ring);
     if(Math.hypot(cwq[0]-18,cwq[1]-43)<14) continue;   /* Hahn Plaza, built with Traveler */
+    var laW=longAxisOf(ring);
+    if(laW[2]>12&&A/laW[2]<laW[2]/3){             /* long and thin: a reflecting pool */
+      fountainRing(M,MGf,ring,0,0); nFount++; continue;
+    }
     if(A<190){                                   /* a rectangle in the data, a round basin in life */
       var cw=centroid(ring);
       ring=ngon(cw[0],cw[1],Math.sqrt(A/Math.PI)*1.08,22,0);
@@ -7034,7 +7701,7 @@ function nearby(x,z,pad){
 }
 /* highest surface under (x,z) that is at or below `ceil` */
 function groundAt(x,z,ceil){
-  var best=0, l=nearby(x,z,1);
+  var best=inColHole(x,z)?COL.fld:0, l=nearby(x,z,1);
   for(var i=0;i<l.length;i++){
     var C=l[i];
     if(C.h<=best||C.h>ceil+0.001) continue;
@@ -7072,6 +7739,1371 @@ function resolve(pos,r,feetY){
   }
   return moved;
 }
+/* ==================================================================
+   The Los Angeles Memorial Coliseum.
+   A sunken superellipse bowl of cardinal seats rising from a field nine
+   metres below the street, squared off at the east end by the peristyle:
+   the arcade of round arches, the great central arch with its stepped
+   pylon, the lettering, the Olympic rings and the torch. The press tower
+   rides the south rim, video boards stand at both ends, the Court of
+   Honor plaza and the Olympic Gateway sit out front.
+   ================================================================== */
+var COL_FLAMES=[], COL_MESH=null;
+(function(){
+  var M=new Mesher();
+  var cx=COL.cx, cz=COL.cz, N=COL.seg, FLD=COL.fld, XP=COL.xp;
+  var RUN=1.45, RISE=0.60, ROW0=FLD+0.86, NR=47, NE=18, FX=cx+COL.ixo;
+  var C_STONE=0xE0D5BF, C_STONE2=0xCFC3AA, C_STONE_D=0xB3A68D,
+      C_SEAT=0xA8272B, C_SEAT2=0x9A2328, C_CONC=0xA9A195, C_CONC2=0x978F83,
+      C_DARK=0x24211F, C_BRONZE=0x5B4632, C_GLASS=0x2F3E4A, C_WHITE=0xEDEBE4,
+      C_PAD=0x1E2622, C_GOLDP=0xE5C23A;
+  var TAU=6.283185307;
+
+  /* a quad whose face is turned toward (nx,ny,nz), whatever order the corners came in */
+  function qf(A,B,C,D,col,sh,nx,ny,nz){
+    var c=rgb(col,sh===undefined?1:sh);
+    var ux=B[0]-A[0],uy=B[1]-A[1],uz=B[2]-A[2], vx=C[0]-A[0],vy=C[1]-A[1],vz=C[2]-A[2];
+    var fx=uy*vz-uz*vy, fy=uz*vx-ux*vz, fz=ux*vy-uy*vx;
+    if(fx*nx+fy*ny+fz*nz>=0) M.quad(A,B,C,D,c,c,c,c); else M.quad(A,D,C,B,c,c,c,c);
+  }
+  function norm(r){ if(ringArea(r)<0) r.reverse(); return r; }
+  function lerp2(a,b,t){ return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t]; }
+
+  /* ------------------------------------------------ the bowl frame */
+  var T0=[], IN=[], OR=[], OC=[], U=[];
+  for(var i=0;i<=N;i++){
+    var t=i/N*TAU; T0.push(t);
+    var a=colInner(t), o=colOuterRaw(t), oc=colOuter(t);
+    IN.push(a); OR.push(o); OC.push(oc);
+    var dx=o[0]-a[0], dz=o[1]-a[1], L=Math.hypot(dx,dz);
+    U.push([dx/L,dz/L,L]);
+  }
+  function P(i,r){ return [IN[i][0]+U[i][0]*r, IN[i][1]+U[i][1]*r]; }
+  /* the peristyle end rows are laid out deeper, so they run most of the way to the arcade */
+  var SC=[];
+  for(i=0;i<=N;i++){
+    var oo=OR[i], ee=0;
+    if(oo[0]>cx){ var ad=Math.abs(oo[1]-cz); ee=ad<=64?1:(ad>=100?0:1-(ad-64)/36); ee=ee*ee*(3-2*ee); }
+    SC.push(1+0.55*ee);
+  }
+  function R(i,k){ return k*RUN*SC[i]; }
+  function PK(i,k,extra){ return P(i,R(i,k)+(extra||0)); }
+  /* how many rows each segment carries: the side stands step down toward the peristyle */
+  var NROW=[];
+  for(i=0;i<N;i++){
+    var tm=(T0[i]+T0[i+1])*0.5, om=colOuterRaw(tm), n=NR;
+    if(om[0]>cx){
+      var adz=Math.abs(om[1]-cz);
+      if(adz<=64) n=NE;
+      else if(adz<100) n=Math.round(NE+(NR-NE)*(adz-64)/36);
+    }
+    NROW.push(n);
+  }
+  function rowY(k){ return ROW0+k*RISE; }
+  function topY(i){ return rowY(NROW[i]-1); }
+  var VOM0=18, VOM1=21;
+  function isVom(i){ return NROW[i]===NR && (i%14)===6; }
+  function isAisle(i){ return (i%7)===3; }
+
+  var cSeatF=[C_SEAT,C_SEAT2];
+  for(i=0;i<N;i++){
+    var j=i+1, n=NROW[i], vom=isVom(i), ai=isAisle(i);
+    /* outward-ish normal of the rows' risers: pointing back to the field */
+    var mx=(IN[i][0]+IN[j][0])*0.5-cx, mz=(IN[i][1]+IN[j][1])*0.5-cz, mL=Math.hypot(mx,mz)||1;
+    var fnx=-mx/mL, fnz=-mz/mL;
+    for(var k=0;k<n;k++){
+      if(vom && k>=VOM0 && k<=VOM1) continue;
+      var y=rowY(k), yb=k===0?FLD:rowY(k-1);
+      var a0=PK(i,k), b0=PK(j,k), a1=PK(i,k+1), b1=PK(j,k+1);
+      /* riser */
+      qf([a0[0],yb,a0[1]],[a0[0],y,a0[1]],[b0[0],y,b0[1]],[b0[0],yb,b0[1]],
+         k===0?C_PAD:C_CONC2, 0.92, fnx,0,fnz);
+      /* tread */
+      qf([a0[0],y,a0[1]],[b0[0],y,b0[1]],[b1[0],y,b1[1]],[a1[0],y,a1[1]], C_CONC, (k%2?0.97:1), 0,1,0);
+      /* the seats: backs toward the rim, a gap for the aisle stair */
+      var sh=0.50, sc=cSeatF[(k+i)%2];
+      var sA0=PK(i,k,0.30), sB0=PK(j,k,0.30), sA1=PK(i,k+1,-0.06), sB1=PK(j,k+1,-0.06);
+      var spans=ai?[[0,0.42],[0.58,1]]:[[0,1]];
+      for(var q=0;q<spans.length;q++){
+        var s0=spans[q][0], s1=spans[q][1];
+        var A0=lerp2(sA0,sB0,s0), B0=lerp2(sA0,sB0,s1),
+            A1=lerp2(sA1,sB1,s0), B1=lerp2(sA1,sB1,s1);
+        qf([A0[0],y,A0[1]],[A0[0],y+sh,A0[1]],[B0[0],y+sh,B0[1]],[B0[0],y,B0[1]], sc,0.86, fnx,0,fnz);
+        qf([A0[0],y+sh,A0[1]],[B0[0],y+sh,B0[1]],[B1[0],y+sh,B1[1]],[A1[0],y+sh,A1[1]], sc,1, 0,1,0);
+      }
+      if(ai){ /* the half step up the middle of each aisle */
+        var H0=lerp2(a0,b0,0.44), H1=lerp2(a0,b0,0.56),
+            G0=lerp2(PK(i,k+0.5),PK(j,k+0.5),0.44), G1=lerp2(PK(i,k+0.5),PK(j,k+0.5),0.56);
+        qf([H0[0],y+RISE*0.5,H0[1]],[H1[0],y+RISE*0.5,H1[1]],[G1[0],y+RISE*0.5,G1[1]],[G0[0],y+RISE*0.5,G0[1]],C_CONC,1.04,0,1,0);
+        qf([H0[0],y,H0[1]],[H0[0],y+RISE*0.5,H0[1]],[H1[0],y+RISE*0.5,H1[1]],[H1[0],y,H1[1]],C_CONC2,0.9,fnx,0,fnz);
+      }
+    }
+    if(vom){
+      /* a tunnel mouth: floor, dark back wall, concrete cheeks */
+      var yf=rowY(VOM0-1), yt=rowY(VOM1);
+      var f0=PK(i,VOM0), f1=PK(j,VOM0), g0=PK(i,VOM1+1), g1=PK(j,VOM1+1);
+      qf([f0[0],yf,f0[1]],[f1[0],yf,f1[1]],[g1[0],yf,g1[1]],[g0[0],yf,g0[1]],C_CONC2,0.85,0,1,0);
+      qf([g0[0],yf,g0[1]],[g0[0],yt,g0[1]],[g1[0],yt,g1[1]],[g1[0],yf,g1[1]],C_DARK,1,fnx,0,fnz);
+      for(var sd=0;sd<2;sd++){
+        var si=sd?j:i;
+        for(var kk=VOM0;kk<=VOM1;kk++)
+          segBox(M,PK(si,kk),PK(si,kk+1),yf,rowY(kk)+0.75,0.3,0xC9C1B2,0.8);
+      }
+      addCollider(bandRing(i,j,VOM0,VOM1+1),yf);
+    }
+    /* the concourse behind the top row, out to the outer wall */
+    var ht=topY(i), c0=PK(i,n), c1=PK(j,n);
+    qf([c0[0],ht,c0[1]],[c1[0],ht,c1[1]],[OC[j][0],ht,OC[j][1]],[OC[i][0],ht,OC[i][1]],
+       ht>1?C_CONC:0xC9C1AE, 1, 0,1,0);
+    /* the outer wall and its parapet, where the bowl stands above the street */
+    if(ht>0.5){
+      segBox(M,OC[i],OC[j],0,ht+1.15,0.7,C_STONE,0.72);
+      segBox(M,OC[i],OC[j],ht+1.15,ht+1.35,0.95,C_STONE2,0.9);
+      segBox(M,OC[i],OC[j],0,1.1,1.1,C_STONE_D,0.7);
+      segBox(M,OC[i],OC[j],ht-2.2,ht-1.5,0.95,C_STONE2,0.8);
+      addCollider(segRing(OC[i],OC[j],0.5),ht+1.15);
+    }
+    /* steps down between segments that carry different numbers of rows */
+    var nn=NROW[(i+1)%N];
+    if(nn!==n && j<=N){
+      var hi=Math.max(n,nn), lo=Math.min(n,nn);
+      var ylo=rowY(lo-1), sgn=(n>nn)?1:-1;
+      var tnx=-U[j][1]*sgn, tnz=U[j][0]*sgn;
+      for(k=lo;k<hi;k++){
+        var e0=PK(j,k), e1=PK(j,k+1);
+        qf([e0[0],ylo,e0[1]],[e0[0],rowY(k),e0[1]],[e1[0],rowY(k),e1[1]],[e1[0],ylo,e1[1]],C_STONE2,0.78,tnx,0,tnz);
+      }
+      var e2=PK(j,hi);
+      qf([e2[0],ylo,e2[1]],[e2[0],rowY(hi-1),e2[1]],[OC[j][0],rowY(hi-1),OC[j][1]],[OC[j][0],ylo,OC[j][1]],C_STONE,0.8,tnx,0,tnz);
+    }
+  }
+  function bandRing(i,j,r0,r1){
+    var r=[]; for(var q=i;q<=j;q++) r.push(PK(q%(N+1),r0));
+    for(q=j;q>=i;q--) r.push(PK(q%(N+1),r1));
+    if(ringArea(r)<0) r.reverse(); return r;
+  }
+  function segRing(a,b,w){
+    var dx=b[0]-a[0], dz=b[1]-a[1], L=Math.hypot(dx,dz)||1, nx=-dz/L*w, nz=dx/L*w;
+    var r=[[a[0]+nx,a[1]+nz],[b[0]+nx,b[1]+nz],[b[0]-nx,b[1]-nz],[a[0]-nx,a[1]-nz]];
+    if(ringArea(r)<0) r.reverse(); return r;
+  }
+  /* colliders: each row in runs of a few segments, so you can climb the aisles */
+  for(var k2=0;k2<NR;k2++){
+    var s0i=-1;
+    for(i=0;i<=N;i++){
+      var ok=i<N && k2<NROW[i] && !(isVom(i)&&k2>=VOM0&&k2<=VOM1);
+      if(ok && s0i<0) s0i=i;
+      if(s0i>=0 && (!ok || i-s0i>=5)){
+        addCollider(bandRing(s0i,i,k2,k2+1),rowY(k2));
+        s0i=ok?i:-1;
+      }
+    }
+  }
+  for(i=0;i<N;i++){
+    var cr=[PK(i,NROW[i]),PK(i+1,NROW[i]),OC[i+1],OC[i]];
+    if(ringArea(cr)<0) cr.reverse();
+    addCollider(cr,topY(i));
+  }
+
+  /* pilasters and tunnel portals on the outside of the bowl */
+  for(i=0;i<N;i+=3){
+    if(topY(i)<3) continue;
+    var o=OC[i], on=OC[i+1], dx2=on[0]-o[0], dz2=on[1]-o[1], L2=Math.hypot(dx2,dz2)||1;
+    dx2/=L2; dz2/=L2;
+    var onx=dz2, onz=-dx2; /* outward */
+    var cxm=(o[0]+on[0])*0.5-cx, czm=(o[1]+on[1])*0.5-cz;
+    if(onx*cxm+onz*czm<0){ onx=-onx; onz=-onz; dx2=-dx2; dz2=-dz2; }
+    oriBox(M,o[0]+onx*0.55,o[1]+onz*0.55,dx2,dz2,0.55,0.38,0,topY(i)+0.6,C_STONE2,0.74);
+    if(i%9===0 && topY(i)>10){
+      var pm=[(o[0]+on[0])*0.5+onx*0.36,(o[1]+on[1])*0.5+onz*0.36];
+      archFace(M,pm[0],pm[1],dx2,dz2,onx*0.01,onz*0.01,0,4.4,3.3,2.2,C_DARK,1);
+      archFace(M,pm[0],pm[1],dx2,dz2,onx*0.05,onz*0.05,0,5.2,3.3,2.6,C_STONE2,0.75);
+      archFace(M,pm[0],pm[1],dx2,dz2,onx*0.09,onz*0.09,0,4.4,3.3,2.2,C_DARK,1);
+    }
+  }
+
+  /* ------------------------------------------------ the field */
+  flat(M,norm((function(){ var r=[]; for(var q=0;q<96;q++) r.push(colInner(q/96*TAU)); return r; })()),
+       FLD+0.01,0x3E7F37,1);
+  (function(){
+    var cv=document.createElement('canvas'); cv.width=2048; cv.height=1024;
+    var g=cv.getContext('2d'), S=2048/120;
+    function X(m){ return m*S; }
+    for(var s=0;s<24;s++){ g.fillStyle=s%2?'#3F8A39':'#4A9842'; g.fillRect(X(s*5),0,X(5)+1,1024); }
+    var fx0=(120-109.73)/2, fz0=(60-48.77)/2, yd=0.9144;
+    /* end zones */
+    g.fillStyle='#8E1B24';
+    g.fillRect(X(fx0),X(fz0),X(10*yd),X(48.77)); g.fillRect(X(fx0+110*yd),X(fz0),X(10*yd),X(48.77));
+    g.save(); g.fillStyle='#F2C94C'; g.strokeStyle='#FFFFFF'; g.lineWidth=6;
+    g.font='900 150px Georgia,serif'; g.textAlign='center'; g.textBaseline='middle';
+    g.translate(X(fx0+5*yd),512); g.rotate(-Math.PI/2); g.strokeText('TROJANS',0,0); g.fillText('TROJANS',0,0); g.restore();
+    g.save(); g.fillStyle='#F2C94C'; g.strokeStyle='#FFFFFF'; g.lineWidth=6;
+    g.font='900 150px Georgia,serif'; g.textAlign='center'; g.textBaseline='middle';
+    g.translate(X(fx0+115*yd),512); g.rotate(Math.PI/2); g.strokeText('TROJANS',0,0); g.fillText('TROJANS',0,0); g.restore();
+    /* lines */
+    g.strokeStyle='#F4F4EE'; g.fillStyle='#F4F4EE';
+    g.lineWidth=7; g.strokeRect(X(fx0),X(fz0),X(109.73),X(48.77));
+    for(var yl=10;yl<=110;yl+=5){
+      var xx=X(fx0+yl*yd); g.lineWidth=yl%10===0?5:4;
+      g.beginPath(); g.moveTo(xx,X(fz0)); g.lineTo(xx,X(fz0+48.77)); g.stroke();
+    }
+    for(yl=11;yl<110;yl++){ if(yl%5===0) continue;
+      var xh=X(fx0+yl*yd);
+      [fz0+0.3,fz0+20.9,fz0+27.3,fz0+48.1].forEach(function(z0){ g.fillRect(xh-1.5,X(z0),3,X(0.6)); });
+    }
+    g.font='700 64px Arial,sans-serif'; g.textAlign='center'; g.textBaseline='middle';
+    for(yl=20;yl<=100;yl+=10){
+      var num=yl<=60?yl-10:110-yl, xn=X(fx0+yl*yd);
+      g.save(); g.translate(xn,X(fz0+8)); g.rotate(Math.PI); g.fillText(String(num).split('').join(' '),0,0); g.restore();
+      g.fillText(String(num).split('').join(' '),xn,X(fz0+48.77-8));
+    }
+    /* the interlocking SC at midfield */
+    g.save(); g.translate(1024,512); g.rotate(Math.PI/2);
+    g.font='900 300px Georgia,serif'; g.textAlign='center'; g.textBaseline='middle';
+    g.lineWidth=16; g.strokeStyle='#F2C94C'; g.fillStyle='#8E1B24';
+    g.strokeText('C',55,10); g.fillText('C',55,10); g.strokeText('S',-55,10); g.fillText('S',-55,10);
+    g.restore();
+    var tex=new T.CanvasTexture(cv); tex.anisotropy=4;
+    var fm=new T.Mesh(new T.PlaneGeometry(120,60),new T.MeshLambertMaterial({map:tex,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2}));
+    fm.rotation.x=-Math.PI/2; fm.position.set(FX,FLD+0.06,cz); fm.receiveShadow=true;
+    scene.add(fm);
+  })();
+  /* yellow goalposts */
+  for(var gs=-1;gs<=1;gs+=2){
+    var gx=FX+gs*(54.86+2.2), gy=FLD;
+    var GC=0xF1CF2E;
+    segBox(M,[gx,cz],[gx,cz],gy,gy+3.05,0.32,GC,0.85);
+    segBox(M,[gx,cz],[gx-gs*2.2,cz],gy+2.85,gy+3.15,0.26,GC,0.85);
+    segBox(M,[gx-gs*2.2,cz-2.82],[gx-gs*2.2,cz+2.82],gy+3.0,gy+3.28,0.24,GC,0.9);
+    for(var up=-1;up<=1;up+=2)
+      segBox(M,[gx-gs*2.2,cz+up*2.82],[gx-gs*2.2,cz+up*2.82],gy+3.0,gy+13.0,0.2,GC,0.9);
+    postAt(M,gx,cz,gy,gy+2.0,0.42,0x9E1B24,0.8);
+  }
+  /* team benches along each sideline */
+  for(var sb=-1;sb<=1;sb+=2){
+    oriBox(M,FX,cz+sb*29.5,1,0,22,0.7,FLD,FLD+0.9,0x6E1A20,0.8);
+  }
+
+  /* ------------------------------------------------ the peristyle */
+  var AD=7.0;                      /* depth of the arcade */
+  var BAY=8.5, PIER=2.3, SPR=9.0, ATT=16.5;
+  function archSpan(z0,z1,xf,xb,ys,rise,ytop,col,shade){
+    /* a vault running through the wall between z0 and z1, with the solid spandrel above */
+    var ns=10, zc=(z0+z1)*0.5, hw=(z1-z0)*0.5;
+    function yA(z){ var u=(z-zc)/hw; return ys+rise*Math.sqrt(Math.max(0,1-u*u)); }
+    for(var s=0;s<ns;s++){
+      var za=z0+(z1-z0)*s/ns, zb=z0+(z1-z0)*(s+1)/ns, ya=yA(za), yb=yA(zb);
+      qf([xf,ya,za],[xf,ytop,za],[xf,ytop,zb],[xf,yb,zb],col,shade,1,0,0);
+      qf([xb,ya,za],[xb,ytop,za],[xb,ytop,zb],[xb,yb,zb],col,shade,-1,0,0);
+      qf([xf,ya,za],[xb,ya,za],[xb,yb,zb],[xf,yb,zb],col,shade*0.62,0,-1,0);
+    }
+  }
+  function pier(x0,x1,z0,z1,y0,y1,col,shade){
+    prism(M,norm([[x0,z0],[x1,z0],[x1,z1],[x0,z1]]),y0,y1,col,col,shade);
+    addCollider(norm([[x0,z0],[x1,z0],[x1,z1],[x0,z1]]),y1);
+  }
+  var XF=XP, XB=XP-AD, PY=11.0;     /* pylon half width */
+  for(var side=-1;side<=1;side+=2){
+    var zs=cz+side*PY, ze=cz+side*64;
+    var nb=Math.round(Math.abs(ze-zs)/BAY), bw=Math.abs(ze-zs)/nb;
+    function lft(b){ return b===0?0:(b===nb?1.8:1.15); }
+    function rgt(b){ return b===0?1.1:(b===nb?0:1.15); }
+    for(var b=0;b<=nb;b++){
+      var zp=zs+side*b*bw;
+      var pa=zp-side*lft(b), pb=zp+side*rgt(b);
+      pier(XB,XF,Math.min(pa,pb),Math.max(pa,pb),0,ATT,C_STONE,0.74);
+      if(b>0&&b<nb) qf([XF+0.04,2.2,zp-0.55],[XF+0.04,3.9,zp-0.55],[XF+0.04,3.9,zp+0.55],[XF+0.04,2.2,zp+0.55],C_BRONZE,0.9,1,0,0);
+      if(b<nb){
+        var o0=zp+side*rgt(b), o1=zp+side*bw-side*lft(b+1);
+        var lo2=Math.min(o0,o1), hi2=Math.max(o0,o1);
+        archSpan(lo2,hi2,XF,XB,SPR,(hi2-lo2)*0.5,ATT,C_STONE,0.9);
+        /* keystone and impost blocks */
+        oriBox(M,XF+0.12,(lo2+hi2)*0.5,0,1,0.45,0.12,SPR+(hi2-lo2)*0.5-0.2,SPR+(hi2-lo2)*0.5+0.9,C_STONE2,0.85);
+        oriBox(M,XF+0.08,lo2+0.1,0,1,0.3,0.10,SPR-0.35,SPR,C_STONE2,0.85);
+        oriBox(M,XF+0.08,hi2-0.1,0,1,0.3,0.10,SPR-0.35,SPR,C_STONE2,0.85);
+      }
+    }
+    /* the attic, cornice and roof of this wing */
+    var zl=Math.min(zs,ze), zh=Math.max(zs,ze);
+    qf([XB,ATT,zl],[XF,ATT,zl],[XF,ATT,zh],[XB,ATT,zh],C_STONE2,1,0,1,0);
+    oriBox(M,(XF+XB)*0.5,(zl+zh)*0.5,0,1,(zh-zl)*0.5,AD*0.5+0.45,ATT-0.9,ATT-0.5,C_STONE2,0.85);
+    oriBox(M,(XF+XB)*0.5,(zl+zh)*0.5,0,1,(zh-zl)*0.5,AD*0.5+0.2,ATT,ATT+1.1,C_STONE,0.82);
+    /* flagpoles along the top */
+    for(var fp=1;fp<=3;fp++){
+      var fz=zs+side*(ze-zs)*side*fp/4*side;
+      fz=zs+(ze-zs)*fp/4;
+      postAt(M,XF-0.8,fz,ATT+1.1,ATT+9.5,0.07,0xD9D9D2,0.9);
+      var FCOL=[0x8E1B24,0xE9B72E,0x8E1B24][fp-1];
+      qf([XF-0.8,ATT+7.6,fz],[XF-0.8,ATT+9.3,fz],[XF-0.8,ATT+9.3,fz+side*2.6],[XF-0.8,ATT+7.6,fz+side*2.6],FCOL,1,1,0,0);
+      qf([XF-0.8,ATT+7.6,fz],[XF-0.8,ATT+9.3,fz],[XF-0.8,ATT+9.3,fz+side*2.6],[XF-0.8,ATT+7.6,fz+side*2.6],FCOL,0.8,-1,0,0);
+    }
+    /* ends of the arcade wrap round into the stands */
+    oriBox(M,XB+AD*0.5,ze+side*2.2,1,0,AD*0.5+0.5,2.4,0,ATT+1.6,C_STONE,0.72);
+  }
+  /* the pylon and the great arch */
+  var PX0=XP-12.5, PX1=XP+2.2, GA=5.6, GS=13.4, PT=27.6;
+  for(side=-1;side<=1;side+=2){
+    var zi=cz+side*GA, zo=cz+side*PY;
+    pier(PX0,PX1,Math.min(zi,zo),Math.max(zi,zo),0,PT,C_STONE,0.76);
+    /* the pilasters either side of the arch, running up to the shoulders */
+    oriBox(M,PX1+0.35,cz+side*(GA+1.5),1,0,0.35,1.5,0,GS+GA+0.4,C_STONE2,0.86);
+    oriBox(M,PX1+0.2,cz+side*(PY-0.9),1,0,0.2,0.9,0,PT-1.2,C_STONE2,0.82);
+    /* bronze plaque panels on the pylon's lower face */
+    qf([PX1+0.72,2.4,cz+side*(GA+0.6)],[PX1+0.72,5.0,cz+side*(GA+0.6)],[PX1+0.72,5.0,cz+side*(GA+2.4)],[PX1+0.72,2.4,cz+side*(GA+2.4)],C_BRONZE,0.9,1,0,0);
+  }
+  archSpan(cz-GA,cz+GA,PX1,PX0,GS,GA,PT,C_STONE,0.92);
+  /* the mosaic in the soffit of the great arch */
+  (function(){
+    var ns=12;
+    for(var s=0;s<ns;s++){
+      var a0=Math.PI*s/ns, a1=Math.PI*(s+1)/ns;
+      var z0=cz-Math.cos(a0)*(GA-0.02), z1=cz-Math.cos(a1)*(GA-0.02),
+          y0=GS+Math.sin(a0)*(GA-0.02), y1=GS+Math.sin(a1)*(GA-0.02);
+      qf([PX1-0.3,y0-0.01,z0],[PX1-3.2,y0-0.01,z0],[PX1-3.2,y1-0.01,z1],[PX1-0.3,y1-0.01,z1],(s%2?0x3C6E9A:0x4A7FAE),1,0,-1,0);
+      qf([PX1-3.2,y0-0.01,z0],[PX1-3.5,y0-0.01,z0],[PX1-3.5,y1-0.01,z1],[PX1-3.2,y1-0.01,z1],0xD7B24A,1,0,-1,0);
+    }
+  })();
+  /* stepped shoulders and the torch */
+  oriBox(M,(PX0+PX1)*0.5,cz,1,0,(PX1-PX0)*0.5-0.6,PY-1.8,PT,PT+1.7,C_STONE,0.8);
+  oriBox(M,(PX0+PX1)*0.5,cz,1,0,(PX1-PX0)*0.5-1.4,PY-3.4,PT+1.7,PT+3.3,C_STONE,0.84);
+  oriBox(M,(PX0+PX1)*0.5-0.6,cz,1,0,2.8,2.8,PT+3.3,PT+4.5,C_STONE2,0.86);
+  (function(){
+    var tx=(PX0+PX1)*0.5-0.6, y0=PT+4.5, y1=y0+11.5, NF=20;
+    for(var s=0;s<NF;s++){
+      var a0=s/NF*TAU, a1=(s+1)/NF*TAU;
+      var r0=(s%2?1.62:1.78), r1=((s+1)%2?1.62:1.78);
+      var r0t=r0*0.74, r1t=r1*0.74;
+      var A=[tx+Math.cos(a0)*r0,y0,cz+Math.sin(a0)*r0], B=[tx+Math.cos(a1)*r1,y0,cz+Math.sin(a1)*r1],
+          C=[tx+Math.cos(a1)*r1t,y1,cz+Math.sin(a1)*r1t], D=[tx+Math.cos(a0)*r0t,y1,cz+Math.sin(a0)*r0t];
+      var am=(a0+a1)*0.5;
+      qf(A,B,C,D,0xF1ECE0,0.9+0.1*(s%2),Math.cos(am),0.05,Math.sin(am));
+    }
+    postAt(M,tx,cz,y1,y1+0.5,1.45,0x2A2A2A,0.8);
+    /* the cauldron */
+    var NC=16, yb2=y1+0.5, yt2=y1+2.3;
+    for(s=0;s<NC;s++){
+      var b0=s/NC*TAU, b1=(s+1)/NC*TAU, bm=(b0+b1)*0.5;
+      qf([tx+Math.cos(b0)*1.2,yb2,cz+Math.sin(b0)*1.2],[tx+Math.cos(b1)*1.2,yb2,cz+Math.sin(b1)*1.2],
+         [tx+Math.cos(b1)*2.5,yt2,cz+Math.sin(b1)*2.5],[tx+Math.cos(b0)*2.5,yt2,cz+Math.sin(b0)*2.5],
+         0x2B2B2D,0.9,Math.cos(bm),-0.4,Math.sin(bm));
+      qf([tx+Math.cos(b0)*2.3,yt2-0.2,cz+Math.sin(b0)*2.3],[tx+Math.cos(b1)*2.3,yt2-0.2,cz+Math.sin(b1)*2.3],
+         [tx+Math.cos(b1)*2.3,yt2-0.2,cz+Math.sin(b1)*2.3],[tx,yt2-0.2,cz],0x1A1A1A,1,0,1,0);
+    }
+    /* flame */
+    var flameM=new T.MeshBasicMaterial({color:0xFFA227,transparent:true,opacity:0.88,depthWrite:false});
+    var coreM=new T.MeshBasicMaterial({color:0xFFE07A,transparent:true,opacity:0.92,depthWrite:false});
+    for(var f=0;f<3;f++){
+      var fg=new T.ConeGeometry(f===0?1.9:1.1,f===0?4.2:3.0,7,1,true);
+      fg.translate(0,f===0?2.1:1.5,0);
+      var fl=new T.Mesh(fg,f===0?flameM:coreM);
+      fl.position.set(tx+(f===1?0.6:(f===2?-0.5:0)),yt2-0.3,cz+(f===2?0.5:(f===1?-0.3:0)));
+      fl.userData.ph=f*1.7; fl.frustumCulled=false; scene.add(fl); COL_FLAMES.push(fl);
+    }
+  })();
+  /* LOS ANGELES MEMORIAL COLISEUM, with the rings beneath */
+  (function(){
+    var cv=document.createElement('canvas'); cv.width=1024; cv.height=512;
+    var g=cv.getContext('2d');
+    g.clearRect(0,0,1024,512);
+    g.font='700 92px Georgia,"Times New Roman",serif'; g.textAlign='center'; g.textBaseline='middle';
+    var lines=['LOS ANGELES','MEMORIAL','COLISEUM'];
+    for(var l=0;l<3;l++){
+      var sp=lines[l].split('').join(String.fromCharCode(8202));
+      g.fillStyle='rgba(60,50,40,0.35)'; g.fillText(sp,516,70+l*104+4,960);
+      g.fillStyle='#5E5A55'; g.fillText(sp,512,70+l*104,960);
+    }
+    var RC=['#1E6FC0','#E8B81E','#1C1C1C','#239A45','#D5283A'];
+    var rx=[392,512,632,452,572], ry=[400,400,400,448,448];
+    g.lineWidth=13;
+    for(var q=0;q<5;q++){ g.strokeStyle=RC[q]; g.beginPath(); g.arc(rx[q],ry[q],52,0,TAU); g.stroke(); }
+    var tex=new T.CanvasTexture(cv); tex.anisotropy=4;
+    var m=new T.Mesh(new T.PlaneGeometry(15.2,7.6),new T.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false,
+          polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-4}));
+    m.position.set(PX1+0.08,GS+GA+4.3,cz); m.rotation.y=Math.PI/2; m.renderOrder=3; scene.add(m);
+    /* the rings again, facing the field */
+    var cv2=document.createElement('canvas'); cv2.width=512; cv2.height=256;
+    var g2=cv2.getContext('2d'); g2.lineWidth=15;
+    var rx2=[136,256,376,196,316], ry2=[100,100,100,150,150];
+    for(q=0;q<5;q++){ g2.strokeStyle=RC[q]; g2.beginPath(); g2.arc(rx2[q],ry2[q],54,0,TAU); g2.stroke(); }
+    var m2=new T.Mesh(new T.PlaneGeometry(10,5),new T.MeshBasicMaterial({map:new T.CanvasTexture(cv2),transparent:true,depthWrite:false,
+          polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-4}));
+    m2.position.set(PX0-0.08,GS+GA+2.8,cz); m2.rotation.y=-Math.PI/2; m2.renderOrder=3; scene.add(m2);
+  })();
+
+  /* ------------------------------------------------ the press tower on the south rim */
+  (function(){
+    var x0=cx-62, x1=cx+50, zf=cz+93, zb=cz+110.5, y0=rowY(NR-1);
+    var lv=[[y0,y0+4.4,0],[y0+4.4,y0+8.8,0],[y0+8.8,y0+12.6,2.2]];
+    for(var l=0;l<lv.length;l++){
+      var a=lv[l][0], b=lv[l][1], sb=lv[l][2];
+      var r=norm([[x0,zf+sb],[x1,zf+sb],[x1,zb],[x0,zb]]);
+      prism(M,r,a,a+0.5,C_WHITE,C_WHITE,0.8);                 /* slab edge */
+      prism(M,norm([[x0+0.4,zf+sb+0.6],[x1-0.4,zf+sb+0.6],[x1-0.4,zb-0.4],[x0+0.4,zb-0.4]]),a+0.5,b,C_GLASS,C_WHITE,0.9);
+      /* mullions */
+      for(var mxx=x0+3;mxx<x1;mxx+=3.2){
+        segBox(M,[mxx,zf+sb+0.5],[mxx,zf+sb+0.5],a+0.5,b,0.16,0xD8D8D2,0.8);
+        segBox(M,[mxx,zb-0.3],[mxx,zb-0.3],a+0.5,b,0.16,0xD8D8D2,0.8);
+      }
+    }
+    prism(M,norm([[x0-1,zf-2.5],[x1+1,zf-2.5],[x1+1,zb+0.6],[x0-1,zb+0.6]]),y0+12.6,y0+13.5,C_WHITE,C_WHITE,0.85);
+    /* end walls */
+    oriBox(M,x0+0.6,(zf+zb)*0.5,1,0,0.6,(zb-zf)*0.5,y0,y0+12.6,C_WHITE,0.8);
+    oriBox(M,x1-0.6,(zf+zb)*0.5,1,0,0.6,(zb-zf)*0.5,y0,y0+12.6,C_WHITE,0.8);
+    /* columns carrying the front edge down onto the stands */
+    for(var cxx=x0+6;cxx<x1;cxx+=12){
+      var rr1=(zf-(cz+38))/RUN, ky=rowY(Math.max(0,Math.min(NR-1,Math.floor(rr1))));
+      postAt(M,cxx,zf+0.4,ky,y0,0.35,C_WHITE,0.8);
+    }
+    /* light banks on the roof */
+    for(var lx=x0+14;lx<x1;lx+=28){
+      postAt(M,lx,zb-3,y0+13.5,y0+19,0.25,0xB9B9B4,0.7);
+      oriBox(M,lx,zb-3.4,1,0,4.2,0.5,y0+19,y0+22,0x3A3C40,0.7);
+      for(var lb=-3;lb<=3;lb++) qf([lx+lb*1.15-0.5,y0+19.3,zb-3.95],[lx+lb*1.15-0.5,y0+21.7,zb-3.95],[lx+lb*1.15+0.5,y0+21.7,zb-3.95],[lx+lb*1.15+0.5,y0+19.3,zb-3.95],0xFBF6E2,1.1,0,0,-1);
+    }
+  })();
+  /* light standards along the north rim */
+  for(var ln=-1;ln<=1;ln++){
+    var lxx=cx+ln*58, lzz=cz-110+Math.abs(ln)*2.5, ly=rowY(NR-1);
+    postAt(M,lxx,lzz,ly,ly+16,0.3,0xB9B9B4,0.7);
+    oriBox(M,lxx,lzz+0.4,1,0,4.6,0.5,ly+16,ly+19.2,0x3A3C40,0.7);
+    for(var lb2=-3;lb2<=3;lb2++) qf([lxx+lb2*1.25-0.55,ly+16.3,lzz+0.95],[lxx+lb2*1.25-0.55,ly+18.9,lzz+0.95],[lxx+lb2*1.25+0.55,ly+18.9,lzz+0.95],[lxx+lb2*1.25+0.55,ly+16.3,lzz+0.95],0xFBF6E2,1.1,0,0,1);
+  }
+
+  /* ------------------------------------------------ the video boards */
+  function boardTex(wide){
+    var cv=document.createElement('canvas'); cv.width=1024; cv.height=wide?320:420;
+    var g=cv.getContext('2d'), W=cv.width, H=cv.height;
+    var gr=g.createLinearGradient(0,0,0,H); gr.addColorStop(0,'#7A1520'); gr.addColorStop(1,'#3E0A10');
+    g.fillStyle=gr; g.fillRect(0,0,W,H);
+    g.fillStyle='#F2C94C'; g.fillRect(0,H*0.80,W,H*0.20);
+    g.fillStyle='#7A1520'; g.font='800 '+(H*0.13|0)+'px Arial,sans-serif'; g.textAlign='center'; g.textBaseline='middle';
+    g.fillText('FIGHT ON!    USC  •  TROJANS  •  FIGHT ON!',W/2,H*0.90);
+    g.font='900 '+(H*0.46|0)+'px Georgia,serif'; g.fillStyle='#F2C94C';
+    g.strokeStyle='#FFFFFF'; g.lineWidth=5;
+    g.strokeText('TROJANS',W/2,H*0.40); g.fillText('TROJANS',W/2,H*0.40);
+    g.fillStyle='#111'; g.fillRect(0,0,W,6); g.fillRect(0,H-6,W,6); g.fillRect(0,0,6,H); g.fillRect(W-6,0,6,H);
+    var t=new T.CanvasTexture(cv); t.anisotropy=4; return t;
+  }
+  var texA=boardTex(false), texB=boardTex(true);
+  function board(x,z,w,h,y0,tex){
+    var dx=cx-x, dz=cz-z, L=Math.hypot(dx,dz); dx/=L; dz/=L;
+    var tx=-dz, tz=dx;
+    oriBox(M,x-dx*0.6,z-dz*0.6,tx,tz,w*0.5+0.5,0.6,y0-0.5,y0+h+0.5,0x1C1D20,0.7);
+    for(var s=-1;s<=1;s+=2){ postAt(M,x+tx*s*w*0.3-dx*1.2,z+tz*s*w*0.3-dz*1.2,y0-6,y0,0.45,0x4A4C50,0.7); }
+    var m=new T.Mesh(new T.PlaneGeometry(w,h),new T.MeshBasicMaterial({map:tex}));
+    m.position.set(x+dx*0.02,y0+h*0.5,z+dz*0.02); m.rotation.y=Math.atan2(dx,dz); scene.add(m);
+  }
+  var ty=rowY(NR-1);
+  board(cx+100,cz-82,22,9,ty+4,texA);
+  board(cx+100,cz+82,22,9,ty+4,texA);
+  board(cx-152,cz,36,11.5,ty+3,texB);
+
+  /* ------------------------------------------------ the Court of Honor */
+  (function(){
+    var G=new Mesher();
+    var px0=XP+2.2, px1=XP+36, pz0=cz-46, pz1=cz+46;
+    var pc=rgb(0xC4A78C,1);
+    G.quad([px0,0.05,pz0],[px0,0.05,pz1],[px1,0.05,pz1],[px1,0.05,pz0],pc,pc,pc,pc);
+    /* paver joints */
+    for(var jx=px0+3;jx<px1;jx+=3) ribbon(G,[[jx,pz0],[jx,pz1]],0.08,0.055,0xAE917A,1);
+    for(var jz=pz0+3;jz<pz1;jz+=3) ribbon(G,[[px0,jz],[px1,jz]],0.08,0.055,0xAE917A,1);
+    ribbon(G,[[px0,pz0],[px1,pz0],[px1,pz1],[px0,pz1]],1.0,0.058,0x8F7A68,1);
+    var gm=new T.Mesh(G.geom(),matGround); gm.receiveShadow=true; scene.add(gm);
+    /* the centennial "100" set into the paving */
+    var cv=document.createElement('canvas'); cv.width=512; cv.height=256;
+    var g=cv.getContext('2d'); g.fillStyle='#8E9296'; g.fillRect(0,0,512,256);
+    g.fillStyle='#B9B4AA'; g.fillRect(8,8,496,240);
+    g.font='900 210px Georgia,serif'; g.textAlign='center'; g.textBaseline='middle';
+    g.lineWidth=10; g.strokeStyle='#3C4044'; g.strokeText('100',256,134);
+    g.fillStyle='#6E7276'; g.fillText('100',256,134);
+    var m=new T.Mesh(new T.PlaneGeometry(14,7),new T.MeshLambertMaterial({map:new T.CanvasTexture(cv),
+          polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-3}));
+    m.rotation.x=-Math.PI/2; m.rotation.z=Math.PI/2; m.position.set(XP+22,0.07,cz+22); scene.add(m);
+    /* the two lamp columns in front of the great arch */
+    for(var s=-1;s<=1;s+=2){
+      var lx=XP+9, lz=cz+s*9.5;
+      var cyl=new T.Mesh(new T.CylinderGeometry(0.62,0.66,4.6,12),new T.MeshLambertMaterial({color:0xB5AE9F}));
+      cyl.position.set(lx,2.3,lz); scene.add(cyl);
+      var cap=new T.Mesh(new T.CylinderGeometry(0.72,0.62,0.3,12),new T.MeshLambertMaterial({color:0x8E877A}));
+      cap.position.set(lx,4.75,lz); scene.add(cap);
+      var gl=new T.Mesh(new T.SphereGeometry(0.46,14,10),new T.MeshLambertMaterial({color:0xF3EFE4,emissive:0x2a2618}));
+      gl.position.set(lx,5.3,lz); scene.add(gl);
+      addCollider([[lx-0.7,lz-0.7],[lx+0.7,lz-0.7],[lx+0.7,lz+0.7],[lx-0.7,lz+0.7]],5.6);
+    }
+    /* chain stanchions edging the lawn */
+    for(var sz=-1;sz<=1;sz+=2){
+      for(var q=0;q<9;q++){
+        var sx=XP+8+q*3.4, szz=cz+sz*40;
+        postAt(M,sx,szz,0,1.0,0.07,0x8A8C8E,0.8);
+        if(q<8) segBox(M,[sx,szz],[sx+3.4,szz],0.82,0.86,0.05,0x8A8C8E,0.8);
+      }
+    }
+  })();
+
+  /* ------------------------------------------------ the Olympic Gateway */
+  (function(){
+    var gx=XP+48, gz=cz, BR=0x6A5236, BR2=0x7C6040, GRAN=0x4B4745;
+    oriBox(M,gx,gz,1,0,3.2,6.4,0,0.6,GRAN,0.8);
+    for(var s=-1;s<=1;s+=2){
+      oriBox(M,gx,gz+s*4.2,1,0,0.55,0.55,0.6,7.2,BR,0.75);
+      addCollider(oriRect(gx,gz+s*4.2,1,0,0.7,0.7),7.2);
+    }
+    oriBox(M,gx,gz,1,0,0.7,5.6,7.2,8.3,BR,0.78);
+    /* two headless bronze athletes standing on the lintel */
+    function figure(fz,h,broad){
+      var y=8.3;
+      for(var l=-1;l<=1;l+=2) oriBox(M,gx,fz+l*0.17*broad,1,0,0.14,0.12,y,y+h*0.47,BR2,0.8);
+      oriBox(M,gx,fz,1,0,0.2,0.3*broad,y+h*0.47,y+h*0.62,BR2,0.8);
+      oriBox(M,gx,fz,1,0,0.22,0.34*broad,y+h*0.62,y+h*0.86,BR2,0.82);
+      for(l=-1;l<=1;l+=2) oriBox(M,gx,fz+l*0.46*broad,1,0,0.1,0.09,y+h*0.50,y+h*0.84,BR2,0.8);
+      oriBox(M,gx,fz,1,0,0.09,0.09,y+h*0.86,y+h*0.90,BR2,0.8);
+    }
+    figure(gz-1.6,2.0,1.12); figure(gz+1.6,1.85,0.95);
+  })();
+
+  var mesh=new T.Mesh(M.geom(),matWorld); mesh.castShadow=true; mesh.receiveShadow=true;
+  mesh.frustumCulled=false; scene.add(mesh);
+  COL_MESH=mesh;
+  NAMED_PLACES.push({name:'Los Angeles Memorial Coliseum',x:cx,z:cz,h:30,rad:120,
+    spot:{x:XP+34,z:cz+6,look:[XP-6,18,cz]}});
+  NAMED_PLACES.push({name:'Peristyle & Olympic Torch',x:XP-4,z:cz,h:40,rad:14});
+  NAMED_PLACES.push({name:'Olympic Gateway',x:XP+48,z:cz,h:10,rad:6});
+})();
+/* ==================================================================
+   Associates Park.
+   The quiet lawn between Bovard and the Physical Education Building:
+   a straight concrete walk running up to the PE Building's three-arched
+   brick entrance, black iron benches either side, amber acorn lamps, a
+   great pale-trunked fig and the two Olympic oaks grown from the seedlings
+   Trojan sprinters brought home from Berlin in 1936, a clump of giant
+   bird of paradise by the door, and the white monument in the middle
+   that has puzzled visitors for decades.
+   ================================================================== */
+var NO_LAWN_TREES=[];
+var ACORN_LAMPS=[];      /* [x,z] - built with the campus lamps */
+(function(){
+  var park=null;
+  for(var i=0;i<PARKS.length;i++) if(PARKS[i].name==='Associates Park') park=PARKS[i].ring;
+  if(!park) return;
+  NO_LAWN_TREES.push(offsetRing(park,4)||park);
+  var M=new Mesher();
+  var BRICK=0x9A4A34, BRICK2=0x8C4330, CAST=0xDCD2BC, CAST2=0xC7BCA4, DARK=0x2A2622, IRON=0x1E2124;
+
+  /* ---- the PE Building's entrance pavilion ---- */
+  /* the entrance sits where the walk meets the east face */
+  var ex=-69.2, ez=-73.0;
+  var fx=-0.447, fz=0.894;          /* along the face, north to south */
+  var nx=0.894, nz=0.447;           /* out of the face, toward the park */
+  var W=7.6, D=3.6, H=10.6, SPR=5.2;
+  function at(u,v){ return [ex+fx*u+nx*v, ez+fz*u+nz*v]; }
+  function box(u0,u1,v0,v1,y0,y1,col,sh){
+    var r=[at(u0,v0),at(u1,v0),at(u1,v1),at(u0,v1)]; if(ringArea(r)<0) r.reverse();
+    prism(M,r,y0,y1,col,col,sh===undefined?0.7:sh);
+    return r;
+  }
+  function q(A,B,C,Dd,col,sh,n){
+    var c=rgb(col,sh===undefined?1:sh);
+    var ux=B[0]-A[0],uy=B[1]-A[1],uz=B[2]-A[2], vx=C[0]-A[0],vy=C[1]-A[1],vz=C[2]-A[2];
+    var fx2=uy*vz-uz*vy, fy2=uz*vx-ux*vz, fz2=ux*vy-uy*vx;
+    if(fx2*n[0]+fy2*n[1]+fz2*n[2]>=0) M.quad(A,B,C,Dd,c,c,c,c); else M.quad(A,Dd,C,B,c,c,c,c);
+  }
+  /* stone plinth and steps */
+  box(-W-0.6,W+0.6,-0.2,D+0.4,0,0.9,CAST2,0.75);
+  for(var st=0;st<3;st++) box(-4.2,4.2,D+0.4+st*0.45,D+0.85+st*0.45,0,0.9-st*0.3,CAST,0.8);
+  /* the three arches: four piers, cast stone columns on the face */
+  var bayW=(2*W)/3;
+  for(var p=0;p<=3;p++){
+    var u=-W+p*bayW, pw=(p===0||p===3)?0.95:0.55;
+    box(u-pw,u+pw,0,D,0.9,H,BRICK,0.72);
+    if(p>0&&p<3){ /* engaged column */
+      var c=at(u,D+0.18);
+      var cyl=new T.CylinderGeometry(0.34,0.38,SPR-1.2,10);
+      var cm=new T.Mesh(cyl,new T.MeshLambertMaterial({color:CAST}));
+      cm.position.set(c[0],0.9+(SPR-1.2)/2,c[1]); cm.castShadow=true; scene.add(cm);
+      box(u-0.48,u+0.48,D-0.2,D+0.58,SPR-0.3,SPR+0.05,CAST2,0.85);
+    }
+  }
+  /* arches: cast stone voussoirs over brick, deep reveals */
+  for(var b=0;b<3;b++){
+    var u0=-W+b*bayW+(b===0?0.95:0.55), u1=-W+(b+1)*bayW-(b===2?0.95:0.55);
+    var uc=(u0+u1)/2, hw=(u1-u0)/2, NS=10;
+    for(var s=0;s<NS;s++){
+      var a0=Math.PI*s/NS, a1=Math.PI*(s+1)/NS;
+      var ua=uc-Math.cos(a0)*hw, ub=uc-Math.cos(a1)*hw, ya=SPR+Math.sin(a0)*hw, yb=SPR+Math.sin(a1)*hw;
+      var A0=at(ua,D), B0=at(ub,D), A1=at(ua,0), B1=at(ub,0);
+      /* spandrel face above the curve, out to the pavilion top */
+      q([A0[0],ya,A0[1]],[A0[0],H,A0[1]],[B0[0],H,B0[1]],[B0[0],yb,B0[1]],BRICK,0.92,[nx,0,nz]);
+      /* soffit */
+      q([A0[0],ya,A0[1]],[B0[0],yb,B0[1]],[B1[0],yb,B1[1]],[A1[0],ya,A1[1]],BRICK2,0.62,[0,-1,0]);
+      /* stone voussoir ring */
+      var ro=hw+0.42;
+      var C0=at(uc-Math.cos(a0)*ro,D+0.05), C1=at(uc-Math.cos(a1)*ro,D+0.05),
+          E0=at(ua,D+0.05), E1=at(ub,D+0.05);
+      q([E0[0],ya,E0[1]],[C0[0],SPR+Math.sin(a0)*ro,C0[1]],[C1[0],SPR+Math.sin(a1)*ro,C1[1]],[E1[0],yb,E1[1]],CAST,0.95,[nx,0,nz]);
+    }
+    /* the recessed doorway wall, dark glass doors and a lantern */
+    var d0=at(u0,0.05), d1=at(u1,0.05);
+    q([d0[0],0.9,d0[1]],[d0[0],SPR+hw,d0[1]],[d1[0],SPR+hw,d1[1]],[d1[0],0.9,d1[1]],BRICK2,0.7,[nx,0,nz]);
+    var g0=at(uc-1.0,0.1), g1=at(uc+1.0,0.1);
+    q([g0[0],0.9,g0[1]],[g0[0],3.7,g0[1]],[g1[0],3.7,g1[1]],[g1[0],0.9,g1[1]],0x2A3440,1,[nx,0,nz]);
+    var w0=at(uc-0.9,0.1), w1=at(uc+0.9,0.1);
+    q([w0[0],4.1,w0[1]],[w0[0],SPR+hw-0.7,w0[1]],[w1[0],SPR+hw-0.7,w1[1]],[w1[0],4.1,w1[1]],0x3A4652,1,[nx,0,nz]);
+    var lp=at(uc,D*0.5);
+    var lan=new T.Mesh(new T.CylinderGeometry(0.22,0.16,0.6,6),new T.MeshLambertMaterial({color:0xE9B864,emissive:0x6a4410}));
+    lan.position.set(lp[0],SPR+hw-1.2,lp[1]); scene.add(lan);
+    segBox(M,lp,lp,SPR+hw-0.9,SPR+hw,0.04,IRON,0.7);
+  }
+  /* round oculus windows and the cast stone cornice */
+  for(b=0;b<3;b++){
+    var uo=-W+(b+0.5)*bayW, o=at(uo,D+0.06);
+    var og=new T.CircleGeometry(0.42,14), om=new T.Mesh(og,new T.MeshLambertMaterial({color:CAST}));
+    om.position.set(o[0],H-1.25,o[1]); om.rotation.y=Math.atan2(nx,nz); scene.add(om);
+    var og2=new T.CircleGeometry(0.28,14), om2=new T.Mesh(og2,new T.MeshLambertMaterial({color:0x2A3440}));
+    om2.position.set(o[0]+nx*0.02,H-1.25,o[1]+nz*0.02); om2.rotation.y=Math.atan2(nx,nz); scene.add(om2);
+  }
+  box(-W-0.35,W+0.35,-0.1,D+0.35,H,H+0.45,CAST,0.85);
+  box(-W-0.1,W+0.1,0,D+0.1,H-0.3,H,CAST2,0.8);
+  addCollider((function(){ var r=[at(-W-0.6,-0.2),at(W+0.6,-0.2),at(W+0.6,D+0.4),at(-W-0.6,D+0.4)]; if(ringArea(r)<0) r.reverse(); return r; })(),0.9);
+  /* carved "USC ASSOCIATES" on the stone base to the north of the entrance */
+  var sgn=at(W+4.2,0.25);
+  box(W+0.6,W+7.8,-0.3,0.25,0,2.3,CAST,0.8);
+  facadeText('USC ASSOCIATES',sgn[0],sgn[1],nx,nz,1.7,5.6,0.55,'#5E5446');
+
+  /* ---- the tower behind, with its corbelled cast stone crown ---- */
+  (function(){
+    var tu=-7, tv=-9.5, hw2=6.2, y0=0, y1=22.5;
+    var r=[at(tu-hw2,tv-hw2),at(tu+hw2,tv-hw2),at(tu+hw2,tv+hw2),at(tu-hw2,tv+hw2)];
+    if(ringArea(r)<0) r.reverse();
+    prism(M,r,y0,y1,BRICK,CAST2,0.6);
+    band(M,r,y1-3.4,y1,0.08,CAST,1,0.8);
+    band(M,r,y1,y1+0.5,0.35,CAST2,1,0.85);
+    /* corbel table: a run of little round arches under the stone band */
+    for(var e=0;e<4;e++){
+      var A=r[e], B=r[(e+1)%4], dx=B[0]-A[0], dz=B[1]-A[1], L=Math.hypot(dx,dz);
+      dx/=L; dz/=L; var ox=dz, oz=-dx;
+      var cx0=(A[0]+B[0])/2-(tu===0?0:0), mid=[(A[0]+B[0])/2,(A[1]+B[1])/2];
+      var tc=[ex+fx*tu+nx*tv, ez+fz*tu+nz*tv];
+      if((mid[0]-tc[0])*ox+(mid[1]-tc[1])*oz<0){ ox=-ox; oz=-oz; }
+      var n2=Math.floor(L/1.05);
+      for(var k=0;k<n2;k++){
+        var uu=(k+0.5)*L/n2, px=A[0]+dx*uu+ox*0.1, pz=A[1]+dz*uu+oz*0.1;
+        archFace(M,px,pz,dx*(ox*dz-oz*dx>0?1:-1),dz*(ox*dz-oz*dx>0?1:-1),0,0,y1-3.4,0.6,0.35,0.3,0x6E3A2A,0.8);
+      }
+      /* two round windows per side */
+      for(var w2=-1;w2<=1;w2+=2){
+        var wc=[mid[0]+dx*w2*2.4+ox*0.06, mid[1]+dz*w2*2.4+oz*0.06];
+        var cw=new T.Mesh(new T.CircleGeometry(0.55,14),new T.MeshLambertMaterial({color:CAST}));
+        cw.position.set(wc[0],y1-5.5,wc[1]); cw.rotation.y=Math.atan2(ox,oz); scene.add(cw);
+        var cw2=new T.Mesh(new T.CircleGeometry(0.36,14),new T.MeshLambertMaterial({color:0x2A3440}));
+        cw2.position.set(wc[0]+ox*0.02,y1-5.5,wc[1]+oz*0.02); cw2.rotation.y=Math.atan2(ox,oz); scene.add(cw2);
+      }
+    }
+  })();
+
+  /* ---- black iron benches on concrete pads either side of the walk ---- */
+  var wa=[-69,-73], wb=[-37,-56];
+  var wdx=wb[0]-wa[0], wdz=wb[1]-wa[1], wL=Math.hypot(wdx,wdz); wdx/=wL; wdz/=wL;
+  var wnx=-wdz, wnz=wdx;
+  function bench(px,pz,fx2,fz2){
+    /* (fx2,fz2): the way a sitter faces */
+    var tx=-fz2, tz=fx2, pad=[];
+    for(var c2=0;c2<4;c2++){ var su=(c2===0||c2===3)?-1.3:1.3, sv=(c2<2)?-0.35:1.25;
+      pad.push([px+tx*su-fx2*sv,pz+tz*su-fz2*sv]); }
+    if(ringArea(pad)<0) pad.reverse();
+    flat(M,pad,0.06,0xC9C2B3,1);
+    for(var sl=0;sl<5;sl++){
+      var o=0.08+sl*0.1;
+      segBox(M,[px+tx*-0.95+fx2*(0.25-o),pz+tz*-0.95+fz2*(0.25-o)],[px+tx*0.95+fx2*(0.25-o),pz+tz*0.95+fz2*(0.25-o)],0.44,0.48,0.06,IRON,0.8);
+    }
+    for(sl=0;sl<4;sl++){
+      var yb=0.58+sl*0.11;
+      segBox(M,[px+tx*-0.95-fx2*0.3,pz+tz*-0.95-fz2*0.3],[px+tx*0.95-fx2*0.3,pz+tz*0.95-fz2*0.3],yb,yb+0.05,0.05,IRON,0.8);
+    }
+    for(var e2=-1;e2<=1;e2+=2){
+      var lx=px+tx*e2*0.98, lz=pz+tz*e2*0.98;
+      segBox(M,[lx+fx2*0.25,lz+fz2*0.25],[lx-fx2*0.32,lz-fz2*0.32],0.0,0.08,0.07,IRON,0.7);
+      segBox(M,[lx+fx2*0.22,lz+fz2*0.22],[lx+fx2*0.22,lz+fz2*0.22],0.0,0.66,0.07,IRON,0.7);
+      segBox(M,[lx-fx2*0.30,lz-fz2*0.30],[lx-fx2*0.30,lz-fz2*0.30],0.0,1.02,0.07,IRON,0.7);
+      segBox(M,[lx+fx2*0.26,lz+fz2*0.26],[lx-fx2*0.26,lz-fz2*0.26],0.64,0.70,0.07,IRON,0.7);
+    }
+    addCollider((function(){ var r=[[px+tx*-1.05-fx2*0.4,pz+tz*-1.05-fz2*0.4],[px+tx*1.05-fx2*0.4,pz+tz*1.05-fz2*0.4],
+      [px+tx*1.05+fx2*0.35,pz+tz*1.05+fz2*0.35],[px+tx*-1.05+fx2*0.35,pz+tz*-1.05+fz2*0.35]]; if(ringArea(r)<0) r.reverse(); return r; })(),0.5);
+  }
+  var off=3.9;
+  [[0.30,1],[0.30,-1],[0.62,1],[0.62,-1]].forEach(function(bs){
+    var px=wa[0]+wdx*wL*bs[0]+wnx*off*bs[1], pz=wa[1]+wdz*wL*bs[0]+wnz*off*bs[1];
+    bench(px,pz,-wnx*bs[1],-wnz*bs[1]);
+  });
+  /* amber acorn lamps by the walk */
+  ACORN_LAMPS.push([wa[0]+wdx*wL*0.16+wnx*3.2, wa[1]+wdz*wL*0.16+wnz*3.2]);
+  ACORN_LAMPS.push([wa[0]+wdx*wL*0.47-wnx*3.2, wa[1]+wdz*wL*0.47-wnz*3.2]);
+  ACORN_LAMPS.push([wa[0]+wdx*wL*0.80+wnx*3.2, wa[1]+wdz*wL*0.80+wnz*3.2]);
+
+  /* ---- the white monument in the middle of the lawn ---- */
+  (function(){
+    var mx=-46, mz=-74, ax=fx, az=fz;
+    var r=oriRect(mx,mz,ax,az,1.9,1.1);
+    prism(M,oriRect(mx,mz,ax,az,2.3,1.5),0,0.35,0xD9D3C6,0xE4DFD3,0.8);
+    prism(M,oriRect(mx,mz,ax,az,1.9,1.1),0.35,1.25,0xEFEBE2,0xF4F1EA,0.82);
+    prism(M,oriRect(mx,mz,ax,az,2.05,1.25),1.25,1.45,0xE6E1D6,0xF1EDE4,0.85);
+    /* a reclining carved figure on the lid, just the massing */
+    prism(M,oriRect(mx-ax*0.3,mz-az*0.3,ax,az,1.3,0.45),1.45,1.95,0xF2EEE6,0xF7F4EE,0.85);
+    prism(M,oriRect(mx+ax*1.3,mz+az*1.3,ax,az,0.35,0.35),1.45,2.2,0xF2EEE6,0xF7F4EE,0.85);
+    addCollider(oriRect(mx,mz,ax,az,2.3,1.5),1.45);
+    NO_PLANT.push(oriRect(mx,mz,ax,az,4.5,3.5));
+    NAMED_PLACES.push({name:'Associates Park Monument',x:mx,z:mz,h:2,rad:3});
+  })();
+
+  /* ---- clipped hedges edging the lawn along the buildings ---- */
+  var hedgeC=0x2E5A27;
+  function hedge(a,b){ segBox(M,a,b,0.02,0.85,1.0,hedgeC,0.62); segBox(M,a,b,0.85,1.0,0.86,hedgeC,0.95);
+    addCollider((function(){ var dx=b[0]-a[0], dz=b[1]-a[1], L=Math.hypot(dx,dz), nx2=-dz/L*0.5, nz2=dx/L*0.5;
+      var r=[[a[0]+nx2,a[1]+nz2],[b[0]+nx2,b[1]+nz2],[b[0]-nx2,b[1]-nz2],[a[0]-nx2,a[1]-nz2]]; if(ringArea(r)<0) r.reverse(); return r; })(),1.0); }
+  hedge(at(W+2.2,5.8),at(W+14,5.8));
+  hedge(at(-W-5.5,5.8),at(-W-12,5.8));
+
+  var mesh=new T.Mesh(M.geom(),matWorld); mesh.frustumCulled=false; scene.add(mesh);
+
+  /* ---- the trees: a great fig, the Olympic oaks, and bird of paradise by the door ---- */
+  TREE_POS.push([-57,-53,0,'ficus',1.75]);
+  TREE_POS.push([-41,-95,0,'oak',1.45]);
+  TREE_POS.push([-33,-80,0,'oak',1.3]);
+  TREE_POS.push([-27,-60,0,'syc',1.25]);
+  var bp=at(-W-3.2,2.6), bp2=at(W+9.5,2.4);
+  TREE_POS.push([bp[0],bp[1],2]);
+  TREE_POS.push([bp[0]-fx*2.2,bp[1]-fz*2.2,2]);
+  TREE_POS.push([bp2[0],bp2[1],2]);
+})();
+/* ==================================================================
+   Exposition Park Rose Garden, across Exposition Boulevard from USC.
+   A sunken lawn laid out as a grid of rose beds edged in white concrete,
+   split down the middle by a wide walk that opens into a round plaza
+   around the big fountain: a shallow basin whose ring of jets arcs in
+   toward a tall centre spout. Tall trees close it in along both long
+   sides. The data layer has already cleared its paths and water (ROSE).
+   ================================================================== */
+(function(){
+  if(!ROSE) return;
+  var X0=ROSE.x0, X1=ROSE.x1, Z0=ROSE.z0, Z1=ROSE.z1, FX=ROSE.fx, FZ=ROSE.fz;
+  var TAU=Math.PI*2;
+  var MW=new Mesher(), MG=new Mesher();
+  var CONC=0xDAD4C7, CONC_D=0xC3BCAD, CURB=0xDDD7CB, SOIL=0x55402F;
+  var RP=24, RB=15, WALKW=9;
+  function ccw(r){ if(ringArea(r)<0) r.reverse(); return r; }
+  function hs(a,b,c){ var x=Math.sin(a*12.9898+b*78.233+c*37.719)*43758.5453; return x-Math.floor(x); }
+
+  /* ---- clear the old random planting, keep the new layout free ---- */
+  var inner=[[X0+2,Z0+2],[X1-2,Z0+2],[X1-2,Z1-2],[X0+2,Z1-2]];
+  for(var i=TREE_POS.length-1;i>=0;i--){
+    var t=TREE_POS[i];
+    if(t[0]>X0-1&&t[0]<X1+1&&t[1]>Z0-1&&t[1]<Z1+1) TREE_POS.splice(i,1);
+  }
+  NO_PLANT.push(ccw(inner));
+  NO_LAWN_TREES.push(ccw([[X0-4,Z0-4],[X1+4,Z0-4],[X1+4,Z1+4],[X0-4,Z1+4]]));
+
+  /* ---- tall trees along both long sides and the short ends ---- */
+  var SP=['ficus','oak','syc','ficus','oak'];
+  for(var x=X0+6,k=0;x<X1-4;x+=10.5,k++){
+    if(Math.abs(x-FX)<9) continue;
+    TREE_POS.push([x,Z0+5.2,0,SP[k%5],1.15+hs(x,1,2)*0.3]);
+    TREE_POS.push([x+3,Z1-5.2,0,SP[(k+2)%5],1.15+hs(x,3,4)*0.3]);
+  }
+  for(var z=Z0+16;z<Z1-12;z+=11){
+    TREE_POS.push([X0+5,z,0,'oak',1.1+hs(z,5,6)*0.3]);
+    TREE_POS.push([X1-5,z,0,'ficus',1.1+hs(z,7,8)*0.3]);
+  }
+
+  /* ---- the central walk and the round plaza ---- */
+  var ww=WALKW*0.5;
+  flat(MG,ccw([[FX-ww,Z0+0.5],[FX+ww,Z0+0.5],[FX+ww,Z1-0.5],[FX-ww,Z1-0.5]]),0.142,CONC,1);
+  for(var sd=-1;sd<=1;sd+=2){
+    flat(MG,ccw([[FX+sd*ww-0.25,Z0+0.5],[FX+sd*ww+0.25,Z0+0.5],[FX+sd*ww+0.25,Z1-0.5],[FX+sd*ww-0.25,Z1-0.5]]),0.147,CONC_D,1);
+    for(var sz=Z0+3;sz<Z1-2;sz+=3)                 /* scored joints */
+      if(Math.abs(sz-FZ)>RP) flat(MG,ccw([[FX-ww,sz],[FX+ww,sz],[FX+ww,sz+0.08],[FX-ww,sz+0.08]]),0.145,CONC_D,1);
+  }
+  flat(MG,ccw(ngon(FX,FZ,RP+0.4,64,0)),0.150,CONC_D,1);
+  flat(MG,ccw(ngon(FX,FZ,RP,64,0)),0.153,CONC,1);
+  flat(MG,ccw(ngon(FX,FZ,RB+2.2,56,0)),0.156,0xD1CABB,1);
+
+  /* ---- the fountain basin ---- */
+  var wallH=0.62, waterY=0.46;
+  var outer=ccw(ngon(FX,FZ,RB+0.35,64,0)), rim=ccw(ngon(FX,FZ,RB-0.45,64,0));
+  band(MW,outer,0.1,wallH,0,0xE4DED0,1,0.62,true);
+  var cT=rgb(0xF0EBDF,1);
+  for(i=0;i<outer.length;i++){
+    var j=(i+1)%outer.length;
+    MW.quad([outer[i][0],wallH,outer[i][1]],[rim[i][0],wallH,rim[i][1]],[rim[j][0],wallH,rim[j][1]],[outer[j][0],wallH,outer[j][1]],cT,cT,cT,cT);
+  }
+  band(MW,rim.slice().reverse(),0.2,wallH,0,0x9D968A,0.9,0.5,true);
+  flat(MG,rim,waterY,0x4C9CCD,1);
+  flat(MG,ccw(ngon(FX,FZ,RB-3.2,48,0)),waterY+0.004,0x3F8FC4,1);
+  /* foam where the arcs come down, and the low centre ring */
+  var fo=ccw(ngon(FX,FZ,6.3,40,0));
+  flat(MG,fo,waterY+0.008,0xCFE7F3,1);
+  flat(MG,ccw(ngon(FX,FZ,4.4,36,0)),waterY+0.012,0x4596CA,1);
+  band(MW,ccw(ngon(FX,FZ,1.5,16,0)),0.2,waterY+0.18,0,0xDCD5C6,1,0.7);
+  flat(MG,ccw(ngon(FX,FZ,1.35,16,0)),waterY+0.2,0xDCEFF8,1);
+  addCollider(outer,wallH);
+
+  /* ---- water: a ring of jets arcing in, and a tall centre spout ---- */
+  var jetM=new T.MeshLambertMaterial({color:0xE2F3FB,transparent:true,opacity:0.62,flatShading:true});
+  var r0=RB-2.4, r1=5.4, hA=4.3, NJ=40;
+  var arc=new T.TubeGeometry(new T.QuadraticBezierCurve3(new T.Vector3(0,0,0),
+            new T.Vector3(-(r0-r1)*0.42,hA*2,0),new T.Vector3(-(r0-r1),0,0)),14,0.075,4,false);
+  var iArc=new T.InstancedMesh(arc,jetM,NJ), D2=new T.Object3D();
+  for(i=0;i<NJ;i++){
+    var a=i/NJ*TAU;
+    D2.position.set(FX+Math.cos(a)*r0,waterY,FZ+Math.sin(a)*r0);
+    D2.rotation.set(0,-a,0); D2.updateMatrix(); iArc.setMatrixAt(i,D2.matrix);
+  }
+  iArc.frustumCulled=false; iArc.raycast=function(){}; scene.add(iArc);
+  var colG=new T.CylinderGeometry(0.06,0.28,1,7); colG.translate(0,0.5,0);
+  var cols=[[0,0,8.2,1.0]];
+  for(i=0;i<8;i++){ var a2=i/8*TAU+0.2; cols.push([Math.cos(a2)*2.6,Math.sin(a2)*2.6,4.6,0.7]); }
+  for(i=0;i<20;i++){ var a3=i/20*TAU+0.1; cols.push([Math.cos(a3)*(RB-1.2),Math.sin(a3)*(RB-1.2),1.1,0.45]); }
+  var iCol=new T.InstancedMesh(colG,jetM,cols.length);
+  for(i=0;i<cols.length;i++){
+    D2.position.set(FX+cols[i][0],waterY+(i===0?0.2:0),FZ+cols[i][1]); D2.rotation.set(0,0,0);
+    D2.scale.set(cols[i][3],cols[i][2],cols[i][3]); D2.updateMatrix(); iCol.setMatrixAt(i,D2.matrix);
+  }
+  iCol.frustumCulled=false; iCol.raycast=function(){}; scene.add(iCol);
+  var cap=new T.Mesh(new T.SphereGeometry(0.7,8,6),jetM);
+  cap.position.set(FX,waterY+8.3,FZ); cap.scale.set(1,0.6,1); scene.add(cap);
+
+  /* ---- benches round the plaza, facing the fountain ---- */
+  var WOOD=0x8C6642, IRON=0x24272A;
+  [30,62,118,150,210,242,298,330].forEach(function(dg){
+    var a=dg*Math.PI/180, bx=FX+Math.cos(a)*(RP-2.0), bz=FZ+Math.sin(a)*(RP-2.0);
+    var ux=-Math.sin(a), uz=Math.cos(a), nx=Math.cos(a), nz=Math.sin(a);
+    oriBox(MW,bx,bz,ux,uz,1.0,0.26,0.44,0.52,WOOD,0.7);
+    oriBox(MW,bx+nx*0.28,bz+nz*0.28,ux,uz,1.0,0.05,0.6,0.95,WOOD,0.7);
+    for(var e=-1;e<=1;e+=2){
+      oriBox(MW,bx+ux*0.9*e,bz+uz*0.9*e,ux,uz,0.05,0.28,0.15,0.46,IRON,0.6);
+      oriBox(MW,bx+ux*0.9*e+nx*0.28,bz+uz*0.9*e+nz*0.28,ux,uz,0.05,0.05,0.15,0.98,IRON,0.6);
+    }
+  });
+  /* lamps where the walks meet the plaza */
+  for(sd=-1;sd<=1;sd+=2) for(var s2=-1;s2<=1;s2+=2) ACORN_LAMPS.push([FX+s2*(ww+0.9),FZ+sd*(RP+1.5)]);
+
+  /* ---- the rose beds ---- */
+  var ROWS=8, zA=Z0+11, zB=Z1-11, pz=(zB-zA)/ROWS, bedD=pz-3.3;
+  var beds=[];
+  function clipHalf(poly,ux,uz,c){   /* keep (p-F).u >= c */
+    var out=[], n=poly.length;
+    for(var i=0;i<n;i++){
+      var A=poly[i], B=poly[(i+1)%n];
+      var da=(A[0]-FX)*ux+(A[1]-FZ)*uz-c, db=(B[0]-FX)*ux+(B[1]-FZ)*uz-c;
+      if(da>=0) out.push(A);
+      if((da>=0)!==(db>=0)){ var t=da/(da-db); out.push([A[0]+(B[0]-A[0])*t,A[1]+(B[1]-A[1])*t]); }
+    }
+    return out;
+  }
+  function side(xa,xb){
+    var cols=Math.max(1,Math.round((xb-xa)/12.5)), px=(xb-xa)/cols, bedW=px-3.3;
+    for(var c=0;c<cols;c++) for(var r=0;r<ROWS;r++){
+      var cx=xa+(c+0.5)*px, cz=zA+(r+0.5)*pz;
+      var poly=[[cx-bedW/2,cz-bedD/2],[cx+bedW/2,cz-bedD/2],[cx+bedW/2,cz+bedD/2],[cx-bedW/2,cz+bedD/2]];
+      var dx=cx-FX, dz=cz-FZ, dl=Math.hypot(dx,dz);
+      if(dl<RP+18){
+        var ux=dx/dl, uz=dz/dl;
+        poly=clipHalf(poly,ux,uz,RP+3.2);
+        /* and a radial aisle on the diagonals, like the real layout */
+        if(poly.length<3) continue;
+      }
+      if(poly.length<3) continue;
+      poly=ccw(poly);
+      if(Math.abs(ringArea(poly))<18) continue;
+      beds.push(poly);
+    }
+  }
+  side(X0+12,FX-ww-3.2);
+  side(FX+ww+3.2,X1-12);
+
+  var PAL=[0xC3172B,0xA3101F,0xE0507F,0xF4A3BD,0xEF6E4E,0xF3C74E,0xF3EFE3,0xD24466,0xF08B3A,0xC9A2D6,0xC3172B,0xE0507F];
+  var bushes=[], flowers=[];
+  for(var b=0;b<beds.length;b++){
+    var poly=beds[b];
+    prism(MW,poly,0,0.15,CURB,CURB,0.8);
+    var soil=offsetRing(poly,-0.18);
+    if(soil) flat(MW,soil,0.155,SOIL,1);
+    var bx0=1e9,bx1=-1e9,bz0=1e9,bz1=-1e9;
+    poly.forEach(function(q){ bx0=Math.min(bx0,q[0]); bx1=Math.max(bx1,q[0]); bz0=Math.min(bz0,q[1]); bz1=Math.max(bz1,q[1]); });
+    var ins=offsetRing(poly,-0.85)||poly;
+    var main=PAL[Math.floor(hs(b,1,7)*PAL.length)], alt=PAL[Math.floor(hs(b,9,3)*PAL.length)];
+    for(var gx=bx0+0.9;gx<bx1-0.5;gx+=1.5) for(var gz=bz0+0.9;gz<bz1-0.5;gz+=1.45){
+      var px=gx+(hs(gx,gz,1)-0.5)*0.4, pz2=gz+(hs(gz,gx,2)-0.5)*0.4;
+      if(!inRing(ins,px,pz2)) continue;
+      var sc=0.8+hs(px,pz2,3)*0.4;
+      bushes.push([px,pz2,sc]);
+      var nf=6;
+      for(var f=0;f<nf;f++){
+        var fa=hs(px,f,4)*TAU, el=0.3+hs(pz2,f,5)*1.0, rr2=0.5*sc;
+        flowers.push([px+Math.cos(fa)*Math.cos(el)*rr2*0.9, 0.16+0.5*sc*1.05+Math.sin(el)*rr2*1.05, pz2+Math.sin(fa)*Math.cos(el)*rr2*0.9,
+                      hs(px,pz2,f+6)<0.8?main:alt]);
+      }
+    }
+  }
+  var bushG=new T.DodecahedronGeometry(0.5,0);
+  var iB=new T.InstancedMesh(bushG,new T.MeshLambertMaterial({color:0xFFFFFF,flatShading:true}),Math.max(1,bushes.length));
+  var cc=new T.Color();
+  for(i=0;i<bushes.length;i++){
+    var q=bushes[i];
+    D2.position.set(q[0],0.16+0.5*q[2]*1.05,q[1]); D2.rotation.set(hs(q[0],2,q[1])*0.6,hs(q[0],q[1],8)*TAU,0);
+    D2.scale.set(q[2]*0.95,q[2]*1.05,q[2]*0.95); D2.updateMatrix(); iB.setMatrixAt(i,D2.matrix);
+    cc.setHex(0x3D6A2C).multiplyScalar(0.8+hs(q[1],q[0],9)*0.4); iB.setColorAt(i,cc);
+  }
+  if(iB.instanceColor) iB.instanceColor.needsUpdate=true;
+  iB.frustumCulled=false; iB.raycast=function(){}; scene.add(iB);
+  var flG=new T.OctahedronGeometry(0.15,0);
+  var iF=new T.InstancedMesh(flG,new T.MeshLambertMaterial({color:0xFFFFFF,emissive:0x303030,flatShading:true}),Math.max(1,flowers.length));
+  for(i=0;i<flowers.length;i++){
+    var fl=flowers[i];
+    D2.position.set(fl[0],fl[1],fl[2]); D2.rotation.set(hs(fl[0],1,1)*3,hs(fl[2],2,2)*3,0);
+    D2.scale.set(1,0.8,1); D2.updateMatrix(); iF.setMatrixAt(i,D2.matrix);
+    cc.setHex(fl[3]).multiplyScalar(0.9+hs(fl[0],fl[2],3)*0.2); iF.setColorAt(i,cc);
+  }
+  if(iF.instanceColor) iF.instanceColor.needsUpdate=true;
+  iF.userData.noShadow=true; iF.frustumCulled=false; iF.raycast=function(){}; scene.add(iF);
+
+  var mw=new T.Mesh(MW.geom(),matWorld); mw.frustumCulled=false; scene.add(mw);
+  var mg=new T.Mesh(MG.geom(),matGround); mg.frustumCulled=false; scene.add(mg);
+  NAMED_PLACES.push({name:'Rose Garden Fountain',x:FX,z:FZ,h:5,rad:RB+4});
+  window.__rose={beds:beds.length,bushes:bushes.length,flowers:flowers.length};
+})();
+/* ==================================================================
+   Landscape pass.
+   Every tree on campus is built here, once all the placement lists are
+   final: broad shade trees made of several leaf masses (coast live oak,
+   sycamore, ficus, magnolia and the spring jacarandas), Mexican fan palms
+   and Canary date palms, each with a mulch ring where it stands in lawn.
+   Then the lawns get their own trees, set back from the walks, and every
+   USC building gets clipped foundation hedges along the planted sides.
+   ================================================================== */
+var LAND_STATS={};
+(function(){
+  var TAU=6.283185307;
+  /* ------------------------------------------------ geometry helpers */
+  function flatten(g){ return g.index?g.toNonIndexed():g; }
+  /* merge several geometries into one, baking a colour per vertex */
+  function bake(parts){
+    var P=[],N=[],C=[];
+    for(var i=0;i<parts.length;i++){
+      var g=flatten(parts[i].g); g.computeVertexNormals();
+      var pos=g.attributes.position, nor=g.attributes.normal, fn=parts[i].c;
+      var y0=1e9,y1=-1e9;
+      for(var k=0;k<pos.count;k++){ y0=Math.min(y0,pos.getY(k)); y1=Math.max(y1,pos.getY(k)); }
+      for(k=0;k<pos.count;k++){
+        P.push(pos.getX(k),pos.getY(k),pos.getZ(k));
+        N.push(nor.getX(k),nor.getY(k),nor.getZ(k));
+        var c=fn(pos.getX(k),pos.getY(k),pos.getZ(k),(pos.getY(k)-y0)/((y1-y0)||1));
+        C.push(c[0],c[1],c[2]);
+      }
+    }
+    var out=new T.BufferGeometry();
+    out.setAttribute('position',new T.Float32BufferAttribute(P,3));
+    out.setAttribute('normal',new T.Float32BufferAttribute(N,3));
+    out.setAttribute('color',new T.Float32BufferAttribute(C,3));
+    out.computeBoundingSphere();
+    return out;
+  }
+  function hashf(x,y,z){ var h=Math.sin(x*127.1+y*311.7+z*74.7)*43758.5453; return h-Math.floor(h); }
+  /* leaves: lighter where the sun reaches the top, darker underneath */
+  function leafShade(x,y,z,t){ var v=0.62+0.50*t+0.10*(hashf(x,y,z)-0.5); return [v,v,v]; }
+  function flatWhite(){ return [1,1,1]; }
+
+  /* a broad shade tree canopy: one rounded mass with lobes hanging round it */
+  function canopyGeom(lobes,spread,flatten2){
+    var parts=[], core=new T.IcosahedronGeometry(1,1);
+    core.scale(1,0.82*flatten2,1); parts.push({g:core,c:leafShade});
+    for(var i=0;i<lobes;i++){
+      var a=i/lobes*TAU+0.4, r=0.62+0.12*((i*7)%3)/2;
+      var lb=new T.IcosahedronGeometry(r,0);
+      lb.scale(1,0.8*flatten2,1);
+      lb.translate(Math.cos(a)*spread,-0.18-0.1*(i%2),Math.sin(a)*spread);
+      parts.push({g:lb,c:leafShade});
+    }
+    var top=new T.IcosahedronGeometry(0.62,0); top.translate(0.12,0.52*flatten2,-0.08);
+    parts.push({g:top,c:leafShade});
+    return bake(parts);
+  }
+  /* trunk with two limbs reaching up into the crown */
+  function trunkGeom(h,r0,r1,limbs){
+    var parts=[];
+    var t=new T.CylinderGeometry(r1,r0,h,7); t.translate(0,h/2,0); parts.push({g:t,c:flatWhite});
+    for(var i=0;i<limbs;i++){
+      var a=i/limbs*TAU+0.7, L=h*0.55;
+      var b=new T.CylinderGeometry(r1*0.45,r1*0.8,L,5);
+      b.translate(0,L/2,0); b.rotateZ(0.62); b.rotateY(a); b.translate(0,h*0.78,0);
+      parts.push({g:b,c:flatWhite});
+    }
+    return bake(parts);
+  }
+  /* fan palm crown: a skirt of dead fronds under a ball of green fans */
+  function fanCrown(){
+    var parts=[];
+    var sk=new T.CylinderGeometry(0.55,0.34,1.5,7); sk.translate(0,-0.75,0);
+    parts.push({g:sk,c:function(){ return [0.55,0.44,0.30]; }});
+    var P=[],n=13;
+    for(var i=0;i<n;i++){
+      var a=i/n*TAU, up=(i%3)*0.35-0.1, L=1.9;
+      var bx=Math.cos(a), bz=Math.sin(a);
+      var tip=[bx*L,up+0.25,bz*L], s1=[bx*L*0.85-bz*0.85,up-0.15,bz*L*0.85+bx*0.85],
+          s2=[bx*L*0.85+bz*0.85,up-0.15,bz*L*0.85-bx*0.85];
+      P.push(0,0,0, s1[0],s1[1],s1[2], tip[0],tip[1],tip[2]);
+      P.push(0,0,0, tip[0],tip[1],tip[2], s2[0],s2[1],s2[2]);
+    }
+    var g=new T.BufferGeometry(); g.setAttribute('position',new T.Float32BufferAttribute(P,3));
+    parts.push({g:g,c:function(x,y,z,t){ var v=0.75+0.35*t; return [0.33*v,0.52*v,0.24*v]; }});
+    return bake(parts);
+  }
+  /* Canary date palm crown: long fronds arching out and down */
+  function dateCrown(){
+    var P=[], n=22;
+    for(var i=0;i<n;i++){
+      var a=i/n*TAU+(i%2)*0.12, tilt=(i%3)*0.25, L=4.6;
+      var bx=Math.cos(a), bz=Math.sin(a), px=-bz, pz=bx;
+      var prev=null;
+      for(var s=0;s<=4;s++){
+        var u=s/4, r=u*L, y=Math.sin(u*2.2)*1.1-u*u*(1.8+tilt*2)+0.2;
+        var w=0.55*Math.sin(Math.PI*Math.min(1,u*1.2+0.08));
+        var c=[bx*r,y,bz*r], l=[c[0]+px*w,c[1]-0.05,c[2]+pz*w], rr2=[c[0]-px*w,c[1]-0.05,c[2]-pz*w];
+        if(prev){
+          P.push(prev[1][0],prev[1][1],prev[1][2], l[0],l[1],l[2], c[0],c[1],c[2]);
+          P.push(prev[1][0],prev[1][1],prev[1][2], c[0],c[1],c[2], prev[0][0],prev[0][1],prev[0][2]);
+          P.push(prev[0][0],prev[0][1],prev[0][2], c[0],c[1],c[2], rr2[0],rr2[1],rr2[2]);
+          P.push(prev[0][0],prev[0][1],prev[0][2], rr2[0],rr2[1],rr2[2], prev[2][0],prev[2][1],prev[2][2]);
+        }
+        prev=[c,l,rr2];
+      }
+    }
+    var g=new T.BufferGeometry(); g.setAttribute('position',new T.Float32BufferAttribute(P,3));
+    var ball=new T.IcosahedronGeometry(0.9,0); ball.scale(1,0.8,1);
+    return bake([{g:g,c:function(x,y,z,t){ var v=0.7+0.4*t; return [0.30*v,0.50*v,0.20*v]; }},
+                 {g:ball,c:function(){ return [0.52,0.40,0.26]; }}]);
+  }
+  function palmTrunk(r0,r1,bands){
+    var g=new T.CylinderGeometry(r1,r0,1,8,bands,true); g.translate(0,0.5,0);
+    return bake([{g:g,c:function(x,y,z){ var k=Math.floor(y*bands); var v=(k%2)?0.86:1.0; return [v,v,v]; }}]);
+  }
+
+  var canopyA=canopyGeom(5,0.78,1.0),   /* oak / sycamore / magnolia */
+      canopyF=canopyGeom(7,1.05,0.72),  /* ficus: wide and low */
+      canopyJ=canopyGeom(4,0.70,0.85);  /* jacaranda: airy */
+  var trunkA=trunkGeom(1,0.30,0.19,2), trunkF=trunkGeom(1,0.40,0.26,3);
+  var fanC=fanCrown(), dateC=dateCrown(), fanT=palmTrunk(0.26,0.19,10), dateT=palmTrunk(0.52,0.44,14);
+  /* giant bird of paradise: a clump of grey stems, paddle leaves fanned in one plane */
+  var strel=(function(){
+    var parts=[];
+    for(var i=0;i<6;i++){
+      var a=i/6*TAU+0.3, r=0.35+0.2*(i%2), h=2.6+(i%3)*0.9;
+      var st=new T.CylinderGeometry(0.07,0.11,h,5); st.translate(Math.cos(a)*r,h/2,Math.sin(a)*r);
+      parts.push({g:st,c:function(){ return [0.55,0.52,0.46]; }});
+      var P=[];
+      for(var l=0;l<5;l++){
+        var ang=-1.1+l*0.55+(i%2)*0.2, len=1.6+0.4*((l+i)%2), wid=0.32;
+        var bx=Math.cos(a)*r, bz=Math.sin(a)*r, by=h;
+        var dx=Math.sin(ang)*Math.cos(a+1.57), dz=Math.sin(ang)*Math.sin(a+1.57), dy=Math.cos(ang);
+        var tx=bx+dx*len, ty=by+dy*len*0.8, tz=bz+dz*len;
+        var ox=Math.cos(a)*wid, oz=Math.sin(a)*wid;
+        var mx=(bx+tx)/2, my=(by+ty)/2, mz=(bz+tz)/2;
+        P.push(bx,by,bz, mx+ox,my,mz+oz, tx,ty,tz);
+        P.push(bx,by,bz, tx,ty,tz, mx-ox,my,mz-oz);
+      }
+      var g=new T.BufferGeometry(); g.setAttribute('position',new T.Float32BufferAttribute(P,3));
+      parts.push({g:g,c:function(x,y,z,t){ var v=0.75+0.35*t; return [0.30*v,0.52*v,0.26*v]; }});
+    }
+    return bake(parts);
+  })();
+
+  /* ------------------------------------------------ species */
+  var SPECIES={
+    oak:   {canopy:canopyA, trunk:trunkA, leaf:[0x3D6B2B,0x456F2E,0x365F26], bark:0x5A4633, h:[3.2,4.4], cw:[3.2,4.6]},
+    syc:   {canopy:canopyA, trunk:trunkA, leaf:[0x5C8C3A,0x679640,0x55833A], bark:0xBDB6A2, h:[4.2,5.8], cw:[2.8,3.8]},
+    ficus: {canopy:canopyF, trunk:trunkF, leaf:[0x2F5E27,0x356629,0x2B5623], bark:0xA8A396, h:[3.4,4.6], cw:[4.4,6.2]},
+    mag:   {canopy:canopyA, trunk:trunkA, leaf:[0x2C5424,0x325B28], bark:0x6A6258, h:[3.0,3.8], cw:[2.4,3.1]},
+    jac:   {canopy:canopyJ, trunk:trunkA, leaf:[0x8F78C7,0x9A82CF,0x846DBD], bark:0x5E4E40, h:[3.0,4.0], cw:[3.0,4.0]}
+  };
+  function pickSpecies(x,z){
+    var h=hashf(x*0.37,0,z*0.41);
+    if(h<0.38) return 'oak'; if(h<0.60) return 'syc'; if(h<0.74) return 'ficus';
+    if(h<0.88) return 'mag'; return 'jac';
+  }
+
+  /* ------------------------------------------------ where things may grow */
+  var RG={}, RGC=4;
+  for(var i=0;i<ROADS.length;i++){
+    var pts=ROADS[i].pts, pad=ROADS[i].w*0.5+2.2;
+    for(var s=0;s<pts.length-1;s++){
+      var a=pts[s], b=pts[s+1], L=Math.hypot(b[0]-a[0],b[1]-a[1]), n=Math.max(1,Math.ceil(L/2));
+      for(var k=0;k<=n;k++){
+        var x=a[0]+(b[0]-a[0])*k/n, z=a[1]+(b[1]-a[1])*k/n;
+        for(var cx=Math.floor((x-pad)/RGC);cx<=Math.floor((x+pad)/RGC);cx++)
+          for(var cz=Math.floor((z-pad)/RGC);cz<=Math.floor((z+pad)/RGC);cz++) RG[cx+'_'+cz]=1;
+      }
+    }
+  }
+  function onRoad(x,z){ return RG[Math.floor(x/RGC)+'_'+Math.floor(z/RGC)]===1; }
+  /* a finer test than onWalk: distance to the nearest path's paved edge */
+  var PG={}, PGC=6;
+  for(i=0;i<PATHS.length;i++){
+    var pp=PATHS[i].pts, hw=PATHS[i].w>6?PATHS[i].w*0.75+2.35:(PATHS[i].w>=2.5?PATHS[i].w*0.65+1.15:PATHS[i].w*0.6);
+    for(s=0;s<pp.length-1;s++){
+      var a2=pp[s], b2=pp[s+1];
+      var x0=Math.min(a2[0],b2[0])-hw-8, x1=Math.max(a2[0],b2[0])+hw+8,
+          z0=Math.min(a2[1],b2[1])-hw-8, z1=Math.max(a2[1],b2[1])+hw+8;
+      for(cx=Math.floor(x0/PGC);cx<=Math.floor(x1/PGC);cx++)
+        for(cz=Math.floor(z0/PGC);cz<=Math.floor(z1/PGC);cz++){
+          var key=cx+'_'+cz; (PG[key]||(PG[key]=[])).push([a2[0],a2[1],b2[0],b2[1],hw]);
+        }
+    }
+  }
+  /* how far (x,z) is outside the nearest paved walk; negative means on it */
+  function walkGap(x,z){
+    var l=PG[Math.floor(x/PGC)+'_'+Math.floor(z/PGC)], best=99;
+    if(!l) return best;
+    for(var i=0;i<l.length;i++){
+      var q=l[i], dx=q[2]-q[0], dz=q[3]-q[1], L2=dx*dx+dz*dz||1e-9;
+      var t=((x-q[0])*dx+(z-q[1])*dz)/L2; t=t<0?0:(t>1?1:t);
+      var d=Math.hypot(q[0]+dx*t-x,q[1]+dz*t-z)-q[4];
+      if(d<best) best=d;
+    }
+    return best;
+  }
+  function inSolid(x,z,minH){
+    var l=nearby(x,z,0.5);
+    for(var i=0;i<l.length;i++){ var C=l[i];
+      if(C.h<(minH||1)) continue;
+      if(x<C.x0||x>C.x1||z<C.z0||z>C.z1) continue;
+      if(inRing(C.ring,x,z)) return true; }
+    return false;
+  }
+  function clearOf(x,z,r,minH){
+    if(inSolid(x,z,minH)) return false;
+    for(var k=0;k<8;k++){ var a=k/8*TAU; if(inSolid(x+Math.cos(a)*r,z+Math.sin(a)*r,minH)) return false; }
+    return true;
+  }
+  function noPlant(x,z){
+    for(var q=0;q<NO_PLANT.length;q++) if(inRing(NO_PLANT[q],x,z)) return true;
+    return false;
+  }
+  var PITCHES=AREAS.filter(function(a){return a.k==='p';}).map(function(a){return a.ring;});
+  function onPitch(x,z){ for(var q=0;q<PITCHES.length;q++) if(inRing(PITCHES[q],x,z)) return true; return false; }
+  function nearMonument(x,z,r){
+    for(var i=0;i<POINTS.length;i++){ if(POINTS[i].k==='t') continue;
+      if(Math.abs(POINTS[i].x-x)<r&&Math.abs(POINTS[i].z-z)<r) return true; }
+    return false;
+  }
+  var TGRID={}, TGC=6;
+  function spaced(x,z,r){
+    var c0=Math.floor(x/TGC), c1=Math.floor(z/TGC), rc=Math.ceil(r/TGC);
+    for(var i=-rc;i<=rc;i++) for(var j=-rc;j<=rc;j++){
+      var l=TGRID[(c0+i)+'_'+(c1+j)]; if(!l) continue;
+      for(var k=0;k<l.length;k++) if(Math.hypot(l[k][0]-x,l[k][1]-z)<r) return false;
+    }
+    return true;
+  }
+  function mark(x,z){ var key=Math.floor(x/TGC)+'_'+Math.floor(z/TGC); (TGRID[key]||(TGRID[key]=[])).push([x,z]); }
+  for(i=0;i<TREE_POS.length;i++) mark(TREE_POS[i][0],TREE_POS[i][1]);
+
+  /* ------------------------------------------------ lawn trees */
+  var added=0;
+  for(var gx=LG.x0+4;gx<LG.x1;gx+=7.5){
+    for(var gz=LG.z0+4;gz<LG.z1;gz+=7.5){
+      var x=gx+(hashf(gx,1,gz)-0.5)*6, z=gz+(hashf(gz,2,gx)-0.5)*6;
+      if(lawnAt(x,z)<0.9) continue;
+      if(hashf(x,3,z)>0.42) continue;
+      if(inColHole(x,z)||inPlaza(x,z)||onRoad(x,z)||noPlant(x,z)||onPitch(x,z)) continue;
+      var skip=false; for(var nl=0;nl<NO_LAWN_TREES.length;nl++) if(inRing(NO_LAWN_TREES[nl],x,z)) skip=true;
+      if(skip) continue;
+      if(walkGap(x,z)<2.6) continue;
+      if(!clearOf(x,z,3.6,1.5)) continue;
+      if(nearMonument(x,z,9)) continue;
+      if(!spaced(x,z,7.5)) continue;
+      TREE_POS.push([x,z,hashf(x,5,z)<0.10?1:0]); mark(x,z); added++;
+    }
+  }
+  LAND_STATS.lawnTrees=added;
+
+  /* ------------------------------------------------ tree planters round the plazas */
+  var PLANTERS=[];
+  var KEEP_CLEAR=[[0,0,17],[18,43,13],[20,61,10]];   /* Tommy, the fountain, Traveler */
+  function keepClear(x,z){ for(var q=0;q<KEEP_CLEAR.length;q++) if(Math.hypot(x-KEEP_CLEAR[q][0],z-KEEP_CLEAR[q][1])<KEEP_CLEAR[q][2]) return true; return false; }
+  for(var pi=0;pi<PLAZAS.length;pi++){
+    var pr=offsetRing(PLAZAS[pi],-4.5); if(!pr) continue;
+    for(var pe=0;pe<pr.length;pe++){
+      var pa=pr[pe], pb=pr[(pe+1)%pr.length], pL=Math.hypot(pb[0]-pa[0],pb[1]-pa[1]);
+      var np=Math.floor(pL/6);
+      for(var pk=0;pk<np;pk++){
+        var pu=(pk+0.5)/np, px=pa[0]+(pb[0]-pa[0])*pu, pz=pa[1]+(pb[1]-pa[1])*pu;
+        if(keepClear(px,pz)||walkGap(px,pz)<0.2||noPlant(px,pz)||nearMonument(px,pz,8)||!clearOf(px,pz,2.4,0.5)) continue;
+        if(!spaced(px,pz,9)) continue;
+        PLANTERS.push([px,pz]); mark(px,pz);
+        TREE_POS.push([px,pz,0,hashf(px,8,pz)<0.5?'syc':'ficus',0.95]);
+      }
+    }
+  }
+  /* and in the open stretches inside them */
+  for(pi=0;pi<PLAZAS.length;pi++){
+    var inr=offsetRing(PLAZAS[pi],-2.5); if(!inr) continue;
+    var bx0=1e9,bx1=-1e9,bz0=1e9,bz1=-1e9;
+    inr.forEach(function(q){ bx0=Math.min(bx0,q[0]); bx1=Math.max(bx1,q[0]); bz0=Math.min(bz0,q[1]); bz1=Math.max(bz1,q[1]); });
+    for(var gx2=bx0;gx2<=bx1;gx2+=4) for(var gz2=bz0;gz2<=bz1;gz2+=4){
+      if(!inRing(inr,gx2,gz2)) continue;
+      if(keepClear(gx2,gz2)||walkGap(gx2,gz2)<0.4||noPlant(gx2,gz2)||nearMonument(gx2,gz2,8)||!clearOf(gx2,gz2,2.4,0.5)) continue;
+      if(!spaced(gx2,gz2,10)) continue;
+      PLANTERS.push([gx2,gz2]); mark(gx2,gz2);
+      TREE_POS.push([gx2,gz2,0,hashf(gx2,8,gz2)<0.5?'syc':'ficus',0.95]);
+    }
+  }
+  LAND_STATS.planters=PLANTERS.length;
+
+  /* ------------------------------------------------ build the trees */
+  var groups={};
+  function G(key,geom,col){
+    if(!groups[key]) groups[key]={geom:geom,list:[],col:col};
+    return groups[key];
+  }
+  var mulch=[];
+  for(i=0;i<TREE_POS.length;i++){
+    var tp=TREE_POS[i], x3=tp[0], z3=tp[1], kind=tp[2];
+    if(inColHole(x3,z3)) continue;
+    var hsh=hashf(x3,7,z3), onLawn=lawnAt(x3,z3)>0.5&&!inPlaza(x3,z3);
+    if(kind===2){
+      G('strel',strel,0xFFFFFF).list.push([x3,z3,0,rr(0.9,1.2),0]);
+      continue;
+    }
+    if(kind===1){
+      if(hsh<0.6){
+        var ph=rr(13,21);
+        G('fanT',fanT,0x8C7A5E).list.push([x3,z3,ph,0.9+hsh*0.3,1]);
+        G('fanC',fanC,0xFFFFFF).list.push([x3,z3,ph,1.25,0]);
+      } else {
+        var dh=rr(6,9.5);
+        G('dateT',dateT,0x7E6A4E).list.push([x3,z3,dh,1,1]);
+        G('dateC',dateC,0xFFFFFF).list.push([x3,z3,dh,rr(0.9,1.15),0]);
+      }
+      if(onLawn) mulch.push([x3,z3,1.3]);
+      continue;
+    }
+    var sp=tp[3]||pickSpecies(x3,z3), S=SPECIES[sp];
+    var sc=rr(0.85,1.3)*(tp[4]||1);
+    var th=rr(S.h[0],S.h[1])*sc, cw=rr(S.cw[0],S.cw[1])*sc;
+    G('trunk_'+sp,S.trunk,S.bark).list.push([x3,z3,th,Math.max(0.8,sc)*(sp==='ficus'?1.3:1),2]);
+    G('can_'+sp,S.canopy,S.leaf).list.push([x3,z3,th+cw*0.72,cw,3,sp]);
+    if(onLawn) mulch.push([x3,z3,Math.min(2.8,cw*0.55)]);
+  }
+  var D=new T.Object3D(), cc=new T.Color();
+  var total=0;
+  Object.keys(groups).forEach(function(key){
+    var gr=groups[key], n=gr.list.length; if(!n) return;
+    var multi=Array.isArray(gr.col);
+    var mat=new T.MeshLambertMaterial({vertexColors:true,color:multi?0xFFFFFF:gr.col,flatShading:true,
+            side:(key==='fanC'||key==='dateC'||key==='strel')?T.DoubleSide:T.FrontSide});
+    var im=new T.InstancedMesh(gr.geom,mat,n);
+    for(var i=0;i<n;i++){
+      var e=gr.list[i];
+      D.position.set(e[0],0,e[1]); D.rotation.set(0,hashf(e[0],9,e[1])*TAU,0);
+      if(e[4]===1){ D.scale.set(e[3],e[2],e[3]); }            /* palm trunk: y is height */
+      else if(e[4]===0){ D.position.y=e[2]; D.scale.set(e[3],e[3],e[3]); }
+      else if(e[4]===2){ D.scale.set(e[3],e[2],e[3]); }       /* tree trunk */
+      else { D.position.y=e[2]; D.scale.set(e[3],e[3]*rr(0.85,1.05),e[3]*rr(0.9,1.1));
+             D.rotation.set(rr(-0.08,0.08),hashf(e[0],9,e[1])*TAU,rr(-0.08,0.08)); }
+      D.updateMatrix(); im.setMatrixAt(i,D.matrix);
+      if(multi){ cc.setHex(gr.col[i%gr.col.length]).multiplyScalar(0.92+hashf(e[0],4,e[1])*0.16); im.setColorAt(i,cc); }
+    }
+    if(im.instanceColor) im.instanceColor.needsUpdate=true;
+    im.castShadow=true; im.receiveShadow=false; im.frustumCulled=false; im.raycast=function(){};
+    scene.add(im); total+=n;
+  });
+  /* trunks are solid */
+  for(i=0;i<TREE_POS.length;i++){
+    var tq=TREE_POS[i];
+    if(inColHole(tq[0],tq[1])) continue;
+    addCollider([[tq[0]-0.35,tq[1]-0.35],[tq[0]+0.35,tq[1]-0.35],[tq[0]+0.35,tq[1]+0.35],[tq[0]-0.35,tq[1]+0.35]],2.5);
+  }
+  /* mulch rings */
+  if(mulch.length){
+    var mg=new T.CircleGeometry(1,12); mg.rotateX(-Math.PI/2);
+    var mm=new T.MeshLambertMaterial({color:0x4E3A2A,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2});
+    var imu=new T.InstancedMesh(mg,mm,mulch.length);
+    for(i=0;i<mulch.length;i++){
+      D.position.set(mulch[i][0],0.045,mulch[i][1]); D.rotation.set(0,0,0);
+      D.scale.set(mulch[i][2],1,mulch[i][2]); D.updateMatrix(); imu.setMatrixAt(i,D.matrix);
+    }
+    imu.receiveShadow=true; imu.frustumCulled=false; imu.raycast=function(){}; scene.add(imu);
+  }
+  LAND_STATS.trees=total/2|0; LAND_STATS.mulch=mulch.length;
+
+  /* ------------------------------------------------ amber acorn lamps */
+  if(ACORN_LAMPS.length){
+    var postG=bake([
+      {g:(function(){ var g=new T.CylinderGeometry(0.24,0.30,0.55,8); g.translate(0,0.275,0); return g; })(),c:flatWhite},
+      {g:(function(){ var g=new T.CylinderGeometry(0.13,0.17,0.9,8); g.translate(0,1.0,0); return g; })(),c:flatWhite},
+      {g:(function(){ var g=new T.CylinderGeometry(0.075,0.095,2.4,8); g.translate(0,2.65,0); return g; })(),c:flatWhite},
+      {g:(function(){ var g=new T.CylinderGeometry(0.2,0.11,0.22,8); g.translate(0,3.9,0); return g; })(),c:flatWhite}
+    ]);
+    var acornG=new T.LatheGeometry([new T.Vector2(0.05,0),new T.Vector2(0.22,0.06),new T.Vector2(0.26,0.25),
+      new T.Vector2(0.22,0.45),new T.Vector2(0.12,0.6),new T.Vector2(0.03,0.68)],10);
+    acornG.translate(0,4.0,0);
+    var iPost=new T.InstancedMesh(postG,new T.MeshLambertMaterial({color:0x1D2023,vertexColors:true}),ACORN_LAMPS.length);
+    var iAc=new T.InstancedMesh(acornG,new T.MeshLambertMaterial({color:0xF2B04A,emissive:0x8a4f10}),ACORN_LAMPS.length);
+    for(i=0;i<ACORN_LAMPS.length;i++){
+      D.position.set(ACORN_LAMPS[i][0],0,ACORN_LAMPS[i][1]); D.rotation.set(0,0,0); D.scale.set(1,1,1);
+      D.updateMatrix(); iPost.setMatrixAt(i,D.matrix); iAc.setMatrixAt(i,D.matrix);
+      addCollider([[ACORN_LAMPS[i][0]-0.3,ACORN_LAMPS[i][1]-0.3],[ACORN_LAMPS[i][0]+0.3,ACORN_LAMPS[i][1]-0.3],
+                   [ACORN_LAMPS[i][0]+0.3,ACORN_LAMPS[i][1]+0.3],[ACORN_LAMPS[i][0]-0.3,ACORN_LAMPS[i][1]+0.3]],3);
+    }
+    [iPost,iAc].forEach(function(m){ m.frustumCulled=false; m.castShadow=true; m.raycast=function(){}; scene.add(m); });
+  }
+
+  /* ------------------------------------------------ foundation hedges */
+  var M=new Mesher(), hedges=0;
+  for(i=0;i<PLANTERS.length;i++){
+    var pq=PLANTERS[i], pr2=oriRect(pq[0],pq[1],0.883,0.469,1.45,1.45);
+    prism(M,pr2,0,0.5,0xBEB7A8,0xCFC8B9,0.75);
+    flat(M,oriRect(pq[0],pq[1],0.883,0.469,1.2,1.2),0.51,0x4A3828,1);
+    addCollider(pr2,0.5);
+  }
+  var HC=[0x2F5A28,0x355F2A,0x2A5224,0x3B6A30];
+  for(var b3=0;b3<CAMPUS.length;b3++){
+    var ring=CAMPUS[b3].ring;
+    if(inColHole(ring[0][0],ring[0][1])) continue;
+    for(var e2=0;e2<ring.length;e2++){
+      var A=ring[e2], B=ring[(e2+1)%ring.length];
+      var ex=B[0]-A[0], ez=B[1]-A[1], EL=Math.hypot(ex,ez);
+      if(EL<4) continue;
+      ex/=EL; ez/=EL;
+      var nx=ez, nz=-ex;
+      var mx=(A[0]+B[0])*0.5, mz=(A[1]+B[1])*0.5;
+      if(inRing(ring,mx+nx*0.6,mz+nz*0.6)){ nx=-nx; nz=-nz; }
+      var off=1.05, step=1.0, run=null, hcol=HC[b3%HC.length];
+      var flush=function(){
+        if(run && run[1]-run[0]>=2.2){
+          var u0=run[0], u1=run[1];
+          var p0=[A[0]+ex*u0+nx*off,A[1]+ez*u0+nz*off], p1=[A[0]+ex*u1+nx*off,A[1]+ez*u1+nz*off];
+          var hh=0.95+hashf(p0[0],1,p0[1])*0.45;
+          segBox(M,p0,p1,0.02,hh-0.18,1.25,hcol,0.62);
+          segBox(M,p0,p1,hh-0.18,hh,1.02,hcol,0.95);
+          hedges++;
+        }
+        run=null;
+      };
+      for(var u=0.8;u<=EL-0.8;u+=step){
+        var hx=A[0]+ex*u+nx*off, hz=A[1]+ez*u+nz*off;
+        var ok=lawnAt(hx,hz)>0.55 && walkGap(hx,hz)>0.5 && !onRoad(hx,hz) && !inPlaza(hx,hz)
+               && !noPlant(hx,hz) && !inSolid(hx+nx*0.9,hz+nz*0.9,0.5) && !nearMonument(hx,hz,5);
+        if(ok){ if(!run) run=[u,u]; else run[1]=u; }
+        else flush();
+      }
+      flush();
+    }
+  }
+  var hm=new T.Mesh(M.geom(),matWorld); hm.castShadow=true; hm.receiveShadow=true; hm.frustumCulled=false;
+  scene.add(hm);
+  LAND_STATS.hedges=hedges;
+  window.__land=LAND_STATS;
+
+})();
 
 /* ==================================================================== audio */
 var AC=null, masterGain=null, murmurGain=null;
@@ -7566,7 +9598,7 @@ var SPOTS=[];
 (function(){
   var want=['Tommy Trojan','Bovard Administration','Doheny Memorial Library','Alumni Park',
             'Mudd Hall','McCarthy Quad','Student Union','Tutor Campus Center',
-            'Von KleinSmid Center','Leavey Library','Physical Education Building',
+            'Dr. Joseph Medicine Crow Center','Leavey Library','Physical Education Building',
             'Heritage Hall','Widney Alumni House','Town and Gown','Hancock Foundation',
             'Annenberg School','School of Cinematic Arts','Galen Center',
             'Los Angeles Memorial Coliseum','McCarthy Honors Residential College',
@@ -7618,6 +9650,12 @@ function losClear(x,z,s){
 function teleport(){
   spotIdx=(spotIdx+1)%SPOTS.length;
   var s=SPOTS[spotIdx];
+  if(s.spot){
+    P.x=s.spot.x; P.z=s.spot.z; P.y=groundAt(P.x,P.z,3)+0.02; P.vx=P.vy=P.vz=0; P.onGround=true; P.fly=false;
+    var lk=s.spot.look, ldx=lk[0]-P.x, ldz=lk[2]-P.z;
+    P.yaw=Math.atan2(-ldx,-ldz); P.pitch=Math.atan2(lk[1]-1.7,Math.hypot(ldx,ldz))*0.8;
+    pendingPitch=0; pendingYaw=0; feed('&#9873; '+s.name.toUpperCase()); return;
+  }
   var standoff=Math.max(26,Math.min(82,Math.max((s.h||10)*1.75,(s.rad||10)*1.35)));
   var a0=Math.atan2(P.z-s.z,P.x-s.x), cands=[];
   for(var k=0;k<24;k++){
@@ -7743,6 +9781,11 @@ function update(dt){
 
   updateCrowd(dt);
   updateSigns(dt);
+  placeSun(P.x-SUN_DIR.x*0+(-Math.sin(P.yaw))*45, P.z+(-Math.cos(P.yaw))*45);
+  if(COL_FLAMES.length){ var ft=clock.elapsedTime;
+    for(var fi=0;fi<COL_FLAMES.length;fi++){ var fl=COL_FLAMES[fi], ph=fl.userData.ph;
+      fl.scale.set(1+0.08*Math.sin(ft*7.3+ph),1+0.22*Math.sin(ft*9.1+ph*2.3)+0.1*Math.sin(ft*23+ph),1+0.08*Math.cos(ft*6.1+ph));
+      fl.rotation.y=ft*0.6+ph; } }
 
   mapTick+=dt; if(mapTick>0.05){ mapTick=0; drawMap(); updatePlace(); }
 }
@@ -7756,6 +9799,8 @@ function quality(dt){
   var fps=qFrames/qAcc; qAcc=0; qFrames=0;
   if(fps<30){
     qStep++; qPR=qStep===1?1:0.75;
+    if(qStep===1){ sun.shadow.mapSize.set(1024,1024); if(sun.shadow.map){ sun.shadow.map.dispose(); sun.shadow.map=null; } }
+    if(qStep===2){ sun.castShadow=false; }
     renderer.setPixelRatio(qPR); renderer.setSize(innerWidth,innerHeight);
   } else qStep=2;
 }
@@ -7801,6 +9846,15 @@ addEventListener('resize',function(){
   renderer.setPixelRatio(qPR); renderer.setSize(innerWidth,innerHeight);
 });
 
+/* who casts and who catches shadows */
+scene.traverse(function(o){
+  if(!o.isMesh) return;
+  var m=o.material; if(Array.isArray(m)) return;
+  if(m===matWorld){ o.castShadow=true; o.receiveShadow=true; }
+  else if(m===matGround){ o.receiveShadow=true; }
+  else if(o.isInstancedMesh && !m.transparent && !o.userData.noShadow){ o.castShadow=true; }
+  else if(GROUND_MESHES.indexOf(o)>=0){ o.receiveShadow=true; }
+});
 /* --------------------------------------------------------------- boot ---- */
 document.getElementById('bcount').textContent=CAMPUS.length.toLocaleString();
 document.getElementById('ccount').textContent=BUILDINGS.length.toLocaleString();
@@ -7822,5 +9876,6 @@ frame();
 
 })();
 </script>
+
 </body>
 </html>
