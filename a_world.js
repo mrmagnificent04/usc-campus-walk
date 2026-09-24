@@ -2840,6 +2840,14 @@ if(SCI.main){
   if(SCI.imax) NO_PLANT.push(offsetRing(SCI.imax.ring,2.5));
   if(SCI.caam) NO_PLANT.push(offsetRing(SCI.caam.ring,2.5),[[122,528],[142,528],[142,552],[122,552]]);
 }
+/* McCarthy Quad is open lawn, and the Fertitta Hall courtyard is paved seating (a2f_courts.js) */
+var MCQ_RING=null, FERT_COURT=[[239,193],[252,199.5],[256,201],[263,205],[254,221],[231,224],[236.5,208],[237.5,199]];
+(function(){
+  for(var i=0;i<PARKS.length;i++) if(PARKS[i].name==='McCarthy Quad') MCQ_RING=PARKS[i].ring;
+  if(MCQ_RING) NO_PLANT.push(MCQ_RING);
+  if(ringArea(FERT_COURT)<0) FERT_COURT.reverse();
+  NO_PLANT.push(offsetRing(FERT_COURT,1.5));
+})();
 (function(){
   var FELIX=decode('-284,-146 -9,-6 -6,-8 -4,-10 0,-10 4,-10 6,-8 9,-6 10,-3 10,1 10,4 86,46 8,7 5,9 2,10 -1,11 -5,9 -8,7 -10,4 -10,1 -11,-3');
   var BRIT =decode('-272,-243 17,-33 78,41 -17,33');
