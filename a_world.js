@@ -128,6 +128,13 @@ var ROSE=null;
   ROSE={x0:x0,x1:x1,z0:z0,z1:z1,fx:fx,fz:fz};
 })();
 
+/* the Natural History Museum is built by hand in a2d_nhm.js; the city pass skips it */
+var NHM=null, NHM_ANNEX=null;
+(function(){ for(var i=0;i<BUILDINGS.length;i++){ var B=BUILDINGS[i];
+  if(B.name==='Natural History Museum of Los Angeles County'){ NHM=B; B.hand=1; }
+  var c=centroid(B.ring);
+  if(!B.name&&Math.hypot(c[0]+254,c[1]-466)<14){ NHM_ANNEX=B; B.hand=1; } } })();
+
 /* ------------------------------------------- where the paving actually is */
 function buildWalkGrid(){
   WALKG={};
@@ -2601,6 +2608,7 @@ function innerPoint(ring){
   for(i=0;i<BUILDINGS.length;i++){
     var O=BUILDINGS[i], c2=centroid(O.ring);
     O.cx=c2[0]; O.cz=c2[1];
+    if(O.hand) continue;
     var M2=chunkAt(c2[0],c2[1]);
     var pal=PAL[O.cls]||PAL.o;
     var v2=0.90+((i*67)%11)*0.019;
@@ -2809,6 +2817,13 @@ var SPORT_PLACES=[], NO_PLANT=[
   for(i=0;i<WATER.length;i++){ var la=longAxisOf(WATER[i]), A=Math.abs(ringArea(WATER[i]));
     if(la[2]>12&&A/la[2]<la[2]/3){ var ow=offsetRing(WATER[i],6); if(ow) NO_PLANT.push(ow); } }
 })();
+/* the Natural History Museum (a2d_nhm.js) is not a collider yet when the props go
+   down, so keep its walls, the annex and both forecourts clear by hand */
+if(NHM){
+  NO_PLANT.push(offsetRing(NHM.ring,2.5),
+    [[-343,438],[-286,438],[-286,468],[-343,468]],[[-218,369],[-198,369],[-198,397],[-218,397]]);
+  if(NHM_ANNEX) NO_PLANT.push(offsetRing(NHM_ANNEX.ring,1.5));
+}
 (function(){
   var FELIX=decode('-284,-146 -9,-6 -6,-8 -4,-10 0,-10 4,-10 6,-8 9,-6 10,-3 10,1 10,4 86,46 8,7 5,9 2,10 -1,11 -5,9 -8,7 -10,4 -10,1 -11,-3');
   var BRIT =decode('-272,-243 17,-33 78,41 -17,33');

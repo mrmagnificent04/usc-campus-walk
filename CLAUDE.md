@@ -9,7 +9,7 @@ Published as a claude.ai artifact, and this repo deploys to Vercel as a static s
 
 - `./build.sh` concatenates the sources into `game.html` (git-ignored) (three.js from cdnjs) and
   `test.html` (uses `three.local.js`, no network):
-  `a_world.js a2_coliseum.js a2b_assoc.js a2c_rose.js a3_landscape.js b_play.js e_crowd.js c_main.js d_loop.js`
+  `a_world.js a2_coliseum.js a2b_assoc.js a2c_rose.js a2d_nhm.js a3_landscape.js b_play.js e_crowd.js c_main.js d_loop.js`
   wrapped in `head.html` + `world.txt` (the map data, in a `<script type="text/plain">`).
 - `d_loop.js` is always a copy of `d_loop.rel.js` (release). `d_loop.dev.js` adds debug
   hooks (`window.__cam`, `window.__lock`, `window.__dbg`). Edit BOTH when changing the loop.
@@ -48,6 +48,11 @@ around the rose garden. Chromium occasionally crashes ("Target crashed"); just r
 - Associates Park (`a2b_assoc.js`).
 - Exposition Park Rose Garden (`a2c_rose.js`): bed grid, central walk, fountain plaza.
   `ROSE` is set in `a_world.js`, which also strips the garden's OSM fountain and paths.
+- Natural History Museum (`a2d_nhm.js`): 1913 brick building with the rotunda dome facing
+  east down the Rose Garden, Otis Booth Pavilion (glass, fin whale) on the north, cream wings
+  under red tile, the white south front (name, loggia, steps) facing the lawn walk and the
+  Coliseum, NHM Commons in glass at the south-west. `NHM` and `NHM_ANNEX` are set in
+  `a_world.js`, which skips them in the city pass and keeps props off them via `NO_PLANT`.
 - Leavey Library, Doheny Memorial Library, Taper Hall, Zumberge Hall, Fertitta Hall,
   Dr. Joseph Medicine Crow Center (DMC; formerly Von KleinSmid) in `a_world.js` CUSTOM.
 
@@ -62,6 +67,6 @@ around the rose garden. Chromium occasionally crashes ("Target crashed"); just r
 
 ## Publishing
 
-The live artifact is https://claude.ai/artifact/Jd3u1kv8vcGABwVjfZZHCz (version 17 as of
+The live artifact is https://claude.ai/artifact/Jd3u1kv8vcGABwVjfZZHCz (version 18 as of
 this handoff). Publishing there needs the Artifact tool from a Claude session. From
 Claude Code, rebuild `index.html` and push to GitHub; Vercel redeploys from `main`.
