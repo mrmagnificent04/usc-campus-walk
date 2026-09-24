@@ -134,6 +134,14 @@ var NHM=null, NHM_ANNEX=null;
   if(B.name==='Natural History Museum of Los Angeles County'){ NHM=B; B.hand=1; }
   var c=centroid(B.ring);
   if(!B.name&&Math.hypot(c[0]+254,c[1]-466)<14){ NHM_ANNEX=B; B.hand=1; } } })();
+/* the Science Center complex is built by hand in a2e_sci.js */
+var SCI={};
+(function(){ var want={'California Science Center':'main','Lorsch Family Pavilion':'rot',
+    'California Science Center IMAC':'imax','Space Shuttle Endeavour':'endv','California African American Museum':'caam'};
+  for(var i=0;i<BUILDINGS.length;i++){ var B=BUILDINGS[i], k=want[B.name];
+    if(k){ SCI[k]=B; B.hand=1; }
+    var c=centroid(B.ring);
+    if(!B.name&&Math.hypot(c[0]+201.5,c[1]-536.5)<5){ B.hand=1; } } })();
 
 /* ------------------------------------------- where the paving actually is */
 function buildWalkGrid(){
@@ -2823,6 +2831,14 @@ if(NHM){
   NO_PLANT.push(offsetRing(NHM.ring,2.5),
     [[-343,438],[-286,438],[-286,468],[-343,468]],[[-218,369],[-198,369],[-198,397],[-218,397]]);
   if(NHM_ANNEX) NO_PLANT.push(offsetRing(NHM_ANNEX.ring,1.5));
+}
+/* and the same for the Science Center complex (a2e_sci.js): walls, terrace, steps, plaza */
+if(SCI.main){
+  NO_PLANT.push(offsetRing(SCI.main.ring,2.5),[[-215,465],[-156,465],[-156,559],[-215,559]],
+    [[-152,546],[-40,546],[-40,586],[-152,586]],[[-104,452],[-96,452],[-96,466],[-104,466]],
+    [[-84,464],[-40,464],[-40,475],[-84,475]]);
+  if(SCI.imax) NO_PLANT.push(offsetRing(SCI.imax.ring,2.5));
+  if(SCI.caam) NO_PLANT.push(offsetRing(SCI.caam.ring,2.5),[[122,528],[142,528],[142,552],[122,552]]);
 }
 (function(){
   var FELIX=decode('-284,-146 -9,-6 -6,-8 -4,-10 0,-10 4,-10 6,-8 9,-6 10,-3 10,1 10,4 86,46 8,7 5,9 2,10 -1,11 -5,9 -8,7 -10,4 -10,1 -11,-3');

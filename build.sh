@@ -7,7 +7,7 @@ echo '<script id="osmdata" type="text/plain">' >> game.html
 cat world.txt >> game.html
 echo '</script>' >> game.html
 echo '<script>' >> game.html
-cat a_world.js a2_coliseum.js a2b_assoc.js a2c_rose.js a2d_nhm.js a3_landscape.js b_play.js e_crowd.js c_main.js d_loop.js > all.js
+cat a_world.js a2_coliseum.js a2b_assoc.js a2c_rose.js a2d_nhm.js a2e_sci.js a3_landscape.js b_play.js e_crowd.js c_main.js d_loop.js > all.js
 node --check all.js
 cat all.js >> game.html
 echo '</script>' >> game.html
