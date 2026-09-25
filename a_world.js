@@ -143,6 +143,36 @@ var SCI={};
     var c=centroid(B.ring);
     if(!B.name&&Math.hypot(c[0]+201.5,c[1]-536.5)<5){ B.hand=1; } } })();
 
+/* the Metro E Line runs down the middle of Exposition Boulevard (a2g_metro.js):
+   pull the two carriageways apart to leave a clean median for the tracks, wider
+   at the Expo Park/USC station, and leave a hole in the ground for the trench
+   that takes the line under Figueroa */
+var EXPO={z:261.8, st:-45, stHalf:41, xw:-2500, trench:[184,272], portal:272};
+(function(){
+  function taper(x){ var d=Math.abs(x-EXPO.st); return d<48?1:(d<88?(88-d)/40:0); }
+  for(var i=0;i<ROADS.length;i++){
+    var R=ROADS[i], p=R.pts, n=p.length;
+    if(R.w<9||n<2) continue;
+    var ok=true;
+    for(var k=0;k<n;k++) if(p[k][1]<238||p[k][1]>284||p[k][0]<-1200||p[k][0]>300) ok=false;
+    if(!ok) continue;
+    var dx=p[n-1][0]-p[0][0], dz=p[n-1][1]-p[0][1];
+    if(Math.abs(dz)>Math.abs(dx)*0.35) continue;           /* a cross street, leave it */
+    var north=(p[0][1]+p[n-1][1])/2<EXPO.z, q=[];
+    for(k=0;k<n-1;k++){
+      var a=p[k], b=p[k+1], L=Math.hypot(b[0]-a[0],b[1]-a[1]), m=Math.max(1,Math.ceil(L/4));
+      for(var s=0;s<m;s++){ var t=s/m; q.push([a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t]); }
+    }
+    q.push(p[n-1].slice());
+    for(k=0;k<q.length;k++){
+      var tp=taper(q[k][0]);
+      if(north) q[k][1]=Math.min(q[k][1],251.6-4.6*tp);
+      else      q[k][1]=Math.max(q[k][1],272.0+4.6*tp);
+    }
+    R.pts=q; R.w=9;
+  }
+})();
+
 /* ------------------------------------------- where the paving actually is */
 function buildWalkGrid(){
   WALKG={};
@@ -366,7 +396,7 @@ fill.position.set(-300,240,-420); scene.add(fill);
         uniforms:{a:{value:new T.Color(SKY_TOP)},b:{value:new T.Color(SKY_BOT)}},
         vertexShader:'varying float h;void main(){h=normalize(position).y;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
         fragmentShader:'varying float h;uniform vec3 a;uniform vec3 b;void main(){float t=clamp(h*1.5+0.12,0.0,1.0);gl_FragColor=vec4(mix(b,a,pow(t,0.75)),1.0);}'});
-  var dome=new T.Mesh(g,m); dome.frustumCulled=false; scene.add(dome);
+  var dome=new T.Mesh(g,m); dome.frustumCulled=false; dome.renderOrder=-10; scene.add(dome);
   /* chunky low-poly clouds, merged into one mesh */
   var cp=[],cn=[];
   var proto=new T.IcosahedronGeometry(1,0);
@@ -2335,12 +2365,12 @@ var PLAZAS=[
 PLAZAS.forEach(function(r){ if(ringArea(r)<0) r.reverse(); });
 function inPlaza(x,z){ for(var i=0;i<PLAZAS.length;i++) if(inRing(PLAZAS[i],x,z)) return true; return false; }
 (function(){
-  var W=4200, R=[LG.x0,LG.z0,LG.x1,LG.z1];
+  var W=5600, R=[LG.x0,LG.z0,LG.x1,LG.z1];
   /* the far sheet, with the campus rectangle left open */
   var outer=[[-W/2,-W/2],[W/2,-W/2],[W/2,W/2],[-W/2,W/2]],
       hole=[[R[0],R[1]],[R[2],R[1]],[R[2],R[3]],[R[0],R[3]]];
   var Mf=new Mesher();
-  flatHoled(Mf,outer,[hole],0,C_BASE,0.96);
+  flatHoled(Mf,outer,[hole],0,0x8F8C7E,0.96);     /* lots and yards under the city (a4_city.js) */
   var far=new T.Mesh(Mf.geom(),new T.MeshLambertMaterial({vertexColors:true,flatShading:true}));
   far.position.y=-0.07; scene.add(far);
 
@@ -2392,6 +2422,7 @@ function inPlaza(x,z){ for(var i=0;i<PLAZAS.length;i++) if(inRing(PLAZAS[i],x,z)
   for(j=0;j<nz;j++) for(i=0;i<nx;i++){
     var x0=LG.x0+i*LG.c, z0=LG.z0+j*LG.c, x1=x0+LG.c, z1=z0+LG.c;
     if(inColHole(x0,z0)&&inColHole(x1,z0)&&inColHole(x0,z1)&&inColHole(x1,z1)) continue;
+    if(x0>=EXPO.trench[0]&&x1<=EXPO.trench[1]&&z0>=252&&z1<=268) continue;   /* the E Line trench */
     V(i,j); V(i,j+1); V(i+1,j);  V(i+1,j); V(i,j+1); V(i+1,j+1);
   }
   var g=new T.BufferGeometry();
@@ -2840,6 +2871,8 @@ if(SCI.main){
   if(SCI.imax) NO_PLANT.push(offsetRing(SCI.imax.ring,2.5));
   if(SCI.caam) NO_PLANT.push(offsetRing(SCI.caam.ring,2.5),[[122,528],[142,528],[142,552],[122,552]]);
 }
+/* nothing grows in the E Line median */
+NO_PLANT.push([[EXPO.xw,255],[300,255],[300,269],[EXPO.xw,269]]);
 /* McCarthy Quad is open lawn, and the Fertitta Hall courtyard is paved seating (a2f_courts.js) */
 var MCQ_RING=null, FERT_COURT=[[239,193],[252,199.5],[256,201],[263,205],[254,221],[231,224],[236.5,208],[237.5,199]];
 (function(){
