@@ -53,12 +53,16 @@ function drawMap(){
 
 /* ================================================================== input */
 var el=renderer.domElement;
+var touchMode=false, touchMove={f:0,st:0}, touchRun=false;
+function toggleFly(){ P.fly=!P.fly; P.vy=0;
+  feed(P.fly?(touchMode?'FLYING &#183; tap FLY to land':'FLYING &#183; press F to land'):'BACK ON THE GROUND'); }
+function mapZoom(){ mapIdx=(mapIdx+1)%MAPSIZES.length; MAPVIEW=MAPSIZES[mapIdx]; }
 function onKey(e,down){
   var k=e.code;
   keys[k]=down;
   if(!down) return;
-  if(k==='KeyF'&&started){ P.fly=!P.fly; P.vy=0; feed(P.fly?'FLYING &#183; press F to land':'BACK ON THE GROUND'); }
-  if(k==='KeyM'&&started){ mapIdx=(mapIdx+1)%MAPSIZES.length; MAPVIEW=MAPSIZES[mapIdx]; }
+  if(k==='KeyF'&&started) toggleFly();
+  if(k==='KeyM'&&started) mapZoom();
   if(k==='KeyT'&&started) teleport();
   if(k==='KeyH'&&started){ hudEl.classList.toggle('bare'); }
   if(k==='Space'&&started) e.preventDefault();
@@ -85,6 +89,77 @@ document.addEventListener('pointerlockchange',function(){
   if(started&&!locked&&lookMode==='pointer') pause();
 });
 document.addEventListener('pointerlockerror',function(){ lookMode='free'; });
+
+/* ---- touch: left thumb walks (a stick that appears where you put it down),
+   right thumb looks, and a few big buttons do what the keys do ---- */
+(function(){
+  var pad=document.getElementById('touch'), stick=document.getElementById('tstick'), knob=stick.querySelector('i');
+  var TOUCH_LOOK=1.75, SR=52, moveId=null, mx0=0, my0=0, looks={};
+  window.__setTouch=function(){
+    if(touchMode) return; touchMode=true; document.body.classList.add('touch');
+    if(document.pointerLockElement&&document.exitPointerLock) document.exitPointerLock();
+    lookMode='free';
+  };
+  if(window.matchMedia&&matchMedia('(pointer:coarse)').matches) window.__setTouch();
+  addEventListener('touchstart',window.__setTouch,{passive:true});
+  function home(){ stick.style.left=''; stick.style.top=''; stick.style.bottom=''; knob.style.transform=''; touchMove.f=0; touchMove.st=0; }
+  function setStick(x,y){
+    var dx=x-mx0, dy=y-my0, L=Math.hypot(dx,dy);
+    if(L>SR){ dx*=SR/L; dy*=SR/L; L=SR; }
+    knob.style.transform='translate('+dx+'px,'+dy+'px)';
+    var m=L/SR; if(m<0.14){ touchMove.f=0; touchMove.st=0; return; }
+    m=(m-0.14)/0.86; touchMove.f=-dy/L*m; touchMove.st=dx/L*m;
+  }
+  pad.addEventListener('touchstart',function(e){
+    e.preventDefault();
+    if(!started||paused) return;
+    for(var i=0;i<e.changedTouches.length;i++){
+      var t=e.changedTouches[i];
+      if(moveId===null&&t.clientX<innerWidth*0.45){
+        moveId=t.identifier; mx0=t.clientX; my0=t.clientY;
+        stick.style.left=(mx0-62)+'px'; stick.style.top=(my0-62)+'px'; stick.style.bottom='auto';
+      } else looks[t.identifier]=[t.clientX,t.clientY];
+    }
+  },{passive:false});
+  pad.addEventListener('touchmove',function(e){
+    e.preventDefault();
+    for(var i=0;i<e.changedTouches.length;i++){
+      var t=e.changedTouches[i], l=looks[t.identifier];
+      if(t.identifier===moveId) setStick(t.clientX,t.clientY);
+      else if(l){ if(started&&!paused) look((t.clientX-l[0])*TOUCH_LOOK,(t.clientY-l[1])*TOUCH_LOOK); l[0]=t.clientX; l[1]=t.clientY; }
+    }
+  },{passive:false});
+  function end(e){
+    e.preventDefault();
+    for(var i=0;i<e.changedTouches.length;i++){
+      var t=e.changedTouches[i];
+      if(t.identifier===moveId){ moveId=null; home(); }
+      delete looks[t.identifier];
+    }
+  }
+  pad.addEventListener('touchend',end,{passive:false});
+  pad.addEventListener('touchcancel',end,{passive:false});
+  window.__touchReset=function(){ moveId=null; looks={}; home(); keys.Space=false; keys.KeyC=false; };
+  /* buttons: tap ones fire once, hold ones act like a held key */
+  function tap(id,fn){ var b=document.getElementById(id);
+    b.addEventListener('touchstart',function(e){ e.preventDefault(); e.stopPropagation(); b.classList.add('down'); if(started&&!paused) fn(b); },{passive:false});
+    var up=function(e){ e.preventDefault(); e.stopPropagation(); b.classList.remove('down'); };
+    b.addEventListener('touchend',up,{passive:false}); b.addEventListener('touchcancel',up,{passive:false});
+    b.addEventListener('click',function(){ if(!touchMode&&started&&!paused) fn(b); });
+  }
+  function hold(id,key){ var b=document.getElementById(id);
+    b.addEventListener('touchstart',function(e){ e.preventDefault(); e.stopPropagation(); b.classList.add('down'); keys[key]=true; },{passive:false});
+    var up=function(e){ e.preventDefault(); e.stopPropagation(); b.classList.remove('down'); keys[key]=false; };
+    b.addEventListener('touchend',up,{passive:false}); b.addEventListener('touchcancel',up,{passive:false});
+  }
+  tap('tb-fly',function(){ toggleFly(); });
+  tap('tb-run',function(b){ touchRun=!touchRun; b.classList.toggle('on',touchRun); });
+  tap('tb-next',function(){ teleport(); });
+  tap('tb-map',function(){ mapZoom(); });
+  tap('tb-pause',function(){ pause(); });
+  hold('tb-up','Space'); hold('tb-dn','KeyC');
+  document.addEventListener('visibilitychange',function(){ if(document.hidden&&touchMode) pause(); });
+})();
 
 function feed(html){
   var f=document.getElementById('feed'), d=document.createElement('div');

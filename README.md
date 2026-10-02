@@ -1,10 +1,13 @@
 # USC Campus Walk
 
 A first-person walking tour of USC's University Park Campus and Exposition Park,
-in the browser. Walk with WASD, look with the arrow keys, press T to jump between
-landmarks and F to fly above campus. Built with three.js from OpenStreetMap
-footprints, with the landmark buildings (Doheny, Leavey, Bovard, Mudd, the DMC,
-the Coliseum, the Rose Garden and more) modelled by hand.
+in the browser. On a computer: walk with WASD, look with the arrow keys or mouse, press T to
+jump between landmarks and F to fly. On a phone or tablet: left thumb walks, right thumb
+looks, with buttons for NEXT STOP, RUN and FLY. Built with three.js from OpenStreetMap
+footprints, with the landmarks modelled by hand: Doheny, Leavey, Bovard, Mudd, the DMC, the
+Coliseum, the Rose Garden, the Natural History Museum, the California Science Center, and the
+Expo Park/USC Metro station. A generated South LA surrounds the map, with the downtown
+skyline on the horizon. It lowers its own detail if the frame rate drops.
 
 ## Layout
 

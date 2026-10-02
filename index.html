@@ -2,9 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="description" content="A first-person walking tour of USC's University Park Campus.">
 <meta name="theme-color" content="#990000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Ctext y=%2226%22 font-size=%2226%22%3E%F0%9F%8F%9B%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <title>USC Campus Walk</title>
@@ -67,11 +69,11 @@
   #keys b{color:var(--gold);font-weight:700}
 
   /* ---------------- overlays ---------------- */
-  .screen{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;
+  .screen{position:absolute;inset:0;z-index:20;display:flex;
      background:radial-gradient(120% 110% at 50% 0%,#2a3550 0%,#111725 55%,#080b12 100%);
      color:#fff;text-align:center;padding:24px;overflow-y:auto}
   .screen.off{display:none}
-  .panel{max-width:700px;width:100%}
+  .panel{max-width:700px;width:100%;margin:auto}
   .brand{font-family:var(--fd);font-size:clamp(40px,7.6vw,78px);letter-spacing:-2.5px;line-height:.95;
          color:var(--gold);text-shadow:0 6px 0 var(--card),0 10px 26px rgba(0,0,0,.6)}
   .brand span{color:#fff;text-shadow:0 6px 0 #2c3550,0 10px 26px rgba(0,0,0,.6)}
@@ -100,6 +102,52 @@
              transition:width .2s}
   #loadtxt{font-size:11px;letter-spacing:2.4px;color:#8b9ab5;margin-top:10px;font-weight:700}
   #pausewrap .brand{font-size:clamp(30px,5.4vw,52px)}
+
+  /* ---------------- touch controls ---------------- */
+  .tc{display:none} body.touch .tc{display:inline} body.touch .kb{display:none}
+  .howto.tc{display:none} body.touch .howto.tc{display:grid} body.touch .howto.kb{display:none}
+  #wrap{touch-action:none}
+  #touch{position:absolute;inset:0;z-index:6;display:none;touch-action:none;
+         -webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+  body.touch.playing #touch{display:block}
+  #tstick{position:absolute;left:calc(30px + env(safe-area-inset-left));bottom:calc(26px + env(safe-area-inset-bottom));
+          width:124px;height:124px;border-radius:50%;border:2px solid rgba(255,255,255,.32);
+          background:rgba(10,12,18,.22);pointer-events:none}
+  #tstick i{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;
+            background:rgba(255,255,255,.5);box-shadow:0 2px 8px rgba(0,0,0,.35)}
+  #tstick small{position:absolute;left:0;right:0;top:-22px;text-align:center;font:700 10px var(--fu);
+            letter-spacing:2px;color:#fff;opacity:.75;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+  .tb{position:absolute;border:1.5px solid rgba(255,255,255,.38);background:rgba(10,12,18,.5);color:#fff;
+      font:700 12px/1.15 var(--fu);letter-spacing:1.6px;border-radius:14px;min-width:68px;height:54px;padding:0 14px;
+      text-shadow:0 1px 2px rgba(0,0,0,.5);-webkit-appearance:none;appearance:none;touch-action:none}
+  .tb.on{background:var(--card);border-color:var(--gold);color:var(--gold)}
+  .tb.down{background:rgba(255,255,255,.3)}
+  #tb-fly{right:calc(18px + env(safe-area-inset-right));bottom:calc(22px + env(safe-area-inset-bottom))}
+  #tb-run{right:calc(96px + env(safe-area-inset-right));bottom:calc(22px + env(safe-area-inset-bottom))}
+  #tb-up{right:calc(18px + env(safe-area-inset-right));bottom:calc(86px + env(safe-area-inset-bottom));display:none;font-size:17px}
+  #tb-dn{right:calc(96px + env(safe-area-inset-right));bottom:calc(86px + env(safe-area-inset-bottom));display:none;font-size:17px}
+  body.flying #tb-up,body.flying #tb-dn{display:block}
+  body.flying #tb-run{color:#fff}
+  #tb-pause{left:calc(16px + env(safe-area-inset-left));top:40px;min-width:46px;height:40px;padding:0 10px;font-size:13px}
+  #tb-next{right:calc(14px + env(safe-area-inset-right));top:146px;width:132px;height:auto;min-height:46px;padding:7px 8px;
+           font-size:10.5px;text-align:center}
+  #tb-next b{display:block;color:var(--gold);font-size:11px;letter-spacing:.4px;margin-top:3px;
+             white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #tb-map{right:calc(14px + env(safe-area-inset-right));top:12px;width:124px;height:124px;min-width:0;padding:0;
+          background:transparent;border-color:transparent}
+  body.touch #keys,body.touch #nextup{display:none}
+  body.touch #mapbox{width:124px;height:124px;right:calc(14px + env(safe-area-inset-right));top:12px}
+  body.touch #mapn{right:calc(19px + env(safe-area-inset-right));top:15px}
+  body.touch #brandtag{left:calc(16px + env(safe-area-inset-left));top:12px;font-size:10px;letter-spacing:2px}
+  body.touch #place{bottom:calc(20px + env(safe-area-inset-bottom));font-size:17px;max-width:42vw}
+  body.touch #feed{top:10px;font-size:11px}
+  @media (max-height:480px){
+    .screen{padding:14px 20px} .brand{font-size:34px;letter-spacing:-1px}
+    .tag{margin:8px auto 10px;font-size:11px;letter-spacing:1.8px}
+    .howto{margin-bottom:12px;gap:7px;grid-template-columns:repeat(4,1fr)} .howto div{padding:8px 6px;font-size:10px}
+    .howto div b{font-size:12.5px} #play,#resume{padding:13px 36px;font-size:17px}
+    #loadbar{margin-top:12px} .note{margin-top:12px;font-size:10.5px;line-height:1.6}
+  }
 </style>
 </head>
 <body>
@@ -124,11 +172,28 @@
     </div>
   </div>
 
+  <div id="touch">
+    <div id="tstick"><small>WALK</small><i></i></div>
+    <button class="tb" id="tb-map" aria-label="Map zoom"></button>
+    <button class="tb" id="tb-pause" aria-label="Pause">&#10074;&#10074;</button>
+    <button class="tb" id="tb-next">NEXT STOP &#9656;<b id="tnextName">&nbsp;</b></button>
+    <button class="tb" id="tb-up" aria-label="Fly up">&#9650;</button>
+    <button class="tb" id="tb-dn" aria-label="Fly down">&#9660;</button>
+    <button class="tb" id="tb-run">RUN</button>
+    <button class="tb" id="tb-fly">FLY</button>
+  </div>
+
   <div class="screen" id="start">
     <div class="panel">
       <div class="brand">USC <span>CAMPUS WALK</span></div>
       <div class="tag">A walk around University Park, built from USC's own campus map</div>
-      <div class="howto">
+      <div class="howto tc">
+        <div><b>LEFT THUMB</b>DRAG TO WALK</div>
+        <div><b>RIGHT THUMB</b>DRAG TO LOOK</div>
+        <div><b>NEXT STOP</b>JUMP TO A LANDMARK</div>
+        <div><b>FLY</b>RISE OVER CAMPUS</div>
+      </div>
+      <div class="howto kb">
         <div><b>W A S D</b>WALK AROUND</div>
         <div><b>&#8592; &#8593; &#8595; &#8594;</b>LOOK AROUND</div>
         <div><b>SHIFT</b>WALK FASTER</div>
@@ -143,7 +208,7 @@
         You start at <b>Tommy Trojan</b>, in the middle of campus. <b id="bcount">0</b> USC buildings
         traced from the university's own campus map, <b id="ccount">0</b> surrounding city buildings and
         every walkway from OpenStreetMap, and <b id="scount">0</b> students walking to class.<br>
-        Everything is where it really is. You can walk anywhere.
+        Everything is where it really is. You can walk anywhere.<span class="tc"><br>On a phone it is best turned sideways.</span>
       </div>
     </div>
   </div>
@@ -153,8 +218,8 @@
       <div class="brand">PAU<span>SED</span></div>
       <div class="tag">Take your time</div>
       <button id="resume">KEEP WALKING</button>
-      <div class="note">Press <b>ESC</b> or click the button to carry on.<br>
-        Nothing here can be lost, and you cannot get stuck. Press <b>T</b> at any time to be
+      <div class="note"><span class="kb">Press <b>ESC</b> or click the button to carry on.</span><span class="tc">Tap the button to carry on.</span><br>
+        Nothing here can be lost, and you cannot get stuck. <span class="kb">Press <b>T</b></span><span class="tc">Tap <b>NEXT STOP</b></span> at any time to be
         taken straight to the next landmark.</div>
     </div>
   </div>
@@ -10221,6 +10286,7 @@ var LAND_STATS={};
      and the Santa Monica Freeway (10) across the north.
    Everything inside the OSM rectangle (LG) is left to the real data.
    ================================================================== */
+var CITY_LOD={trees:[],palms:[],cars:[]};   /* instanced sets the frame-rate guard can thin, nearest kept longest */
 (function(){
   var T0=performance.now();
   var TAU=Math.PI*2, RALL=2500, RFINE=1400;
@@ -10504,10 +10570,12 @@ var LAND_STATS={};
   var tris=0;
   for(var k in CH){
     var C=CH[k];
-    if(C.M.count()){ var m=new T.Mesh(C.M.geom(),matWorld); m.userData.noShadow=true; scene.add(m); tris+=C.M.count(); }
-    if(C.G.count()){ var g=new T.Mesh(C.G.geom(),matGround); g.userData.noShadow=true; scene.add(g); tris+=C.G.count(); }
+    if(C.M.count()){ var m=new T.Mesh(C.M.geom(),matWorld); m.userData.noShadow=true; m.userData.city=1; scene.add(m); tris+=C.M.count(); }
+    if(C.G.count()){ var g=new T.Mesh(C.G.geom(),matGround); g.userData.noShadow=true; g.userData.city=1; scene.add(g); tris+=C.G.count(); }
   }
   var D=new T.Object3D(), col=new T.Color();
+  var byDist=function(p,q){ return (p[0]*p[0]+p[1]*p[1])-(q[0]*q[0]+q[1]*q[1]); };
+  trees.sort(byDist); palms.sort(byDist); cars.sort(byDist);
   function inst(geo,list,fn,mat){
     if(!list.length) return null;
     var im=new T.InstancedMesh(geo,mat||new T.MeshLambertMaterial({color:0xFFFFFF,flatShading:true}),list.length);
@@ -10518,8 +10586,8 @@ var LAND_STATS={};
   /* shade trees */
   var crown=new T.IcosahedronGeometry(1,0), trunk=new T.CylinderGeometry(0.16,0.26,1,5,1,true); trunk.translate(0,0.5,0);
   var LEAF=[0x3E7A34,0x4E8A3A,0x5C9440,0x39702F,0x6A9A48,0x2F6630];
-  inst(trunk,trees,function(t){ D.position.set(t[0],0,t[1]); D.rotation.set(0,0,0); D.scale.set(t[2]*0.55,t[3]*0.62,t[2]*0.55); col.setHex(0x6B5845); });
-  inst(crown,trees,function(t){ D.position.set(t[0],t[3]*0.62+t[2]*0.55,t[1]); D.rotation.set(0,t[4]*6,0);
+  CITY_LOD.trees[CITY_LOD.trees.length]=inst(trunk,trees,function(t){ D.position.set(t[0],0,t[1]); D.rotation.set(0,0,0); D.scale.set(t[2]*0.55,t[3]*0.62,t[2]*0.55); col.setHex(0x6B5845); });
+  CITY_LOD.trees[CITY_LOD.trees.length]=inst(crown,trees,function(t){ D.position.set(t[0],t[3]*0.62+t[2]*0.55,t[1]); D.rotation.set(0,t[4]*6,0);
     D.scale.set(t[2],t[2]*0.82,t[2]); col.setHex(pick(LEAF,t[4])).multiplyScalar(0.9+t[4]*0.2); });
   /* fan palms: a thin trunk and a burst of fronds */
   var pt=new T.CylinderGeometry(0.17,0.26,1,5); pt.translate(0,0.5,0);
@@ -10528,14 +10596,14 @@ var LAND_STATS={};
       P.push(0,0,0, bx*2.1-bz*0.7,up,bz*2.1+bx*0.7, bx*2.1+bz*0.7,up,bz*2.1-bx*0.7);
       P.push(0,0,0, bx*2.1+bz*0.7,up,bz*2.1-bx*0.7, bx*2.1-bz*0.7,up,bz*2.1+bx*0.7); }
     var g=new T.BufferGeometry(); g.setAttribute('position',new T.Float32BufferAttribute(P,3)); g.computeVertexNormals(); return g; })();
-  inst(pt,palms,function(p){ D.position.set(p[0],0,p[1]); D.rotation.set(0,0,0); D.scale.set(1,p[2],1); col.setHex(0x8A7862); });
-  inst(fr,palms,function(p){ D.position.set(p[0],p[2],p[1]); D.rotation.set(0,p[0],0); D.scale.set(1.3,1.3,1.3); col.setHex(0x4F7A36); },
+  CITY_LOD.palms[CITY_LOD.palms.length]=inst(pt,palms,function(p){ D.position.set(p[0],0,p[1]); D.rotation.set(0,0,0); D.scale.set(1,p[2],1); col.setHex(0x8A7862); });
+  CITY_LOD.palms[CITY_LOD.palms.length]=inst(fr,palms,function(p){ D.position.set(p[0],p[2],p[1]); D.rotation.set(0,p[0],0); D.scale.set(1.3,1.3,1.3); col.setHex(0x4F7A36); },
        new T.MeshLambertMaterial({color:0xFFFFFF,side:T.DoubleSide,flatShading:true}));
   /* parked cars */
   var CARC=[0xF2F2F0,0x1E1E20,0x8A8D91,0xB7BABD,0x9C1C22,0x1F3B6B,0xE9E4D8,0x3C4A3E,0x5B5F63,0xC9A227,0x2F2F31,0x6D2E1F];
   var cb=new T.BoxGeometry(1,1,1); cb.translate(0,0.5,0);
-  inst(cb,cars,function(c){ D.position.set(c[0],0.28,c[1]); D.rotation.set(0,-c[2],0); D.scale.set(4.5,0.78,1.8); col.setHex(pick(CARC,c[3]*3.7)); });
-  inst(cb,cars,function(c){ D.position.set(c[0]-Math.cos(c[2])*0.2,1.06,c[1]-Math.sin(c[2])*0.2); D.rotation.set(0,-c[2],0); D.scale.set(2.4,0.58,1.62); col.setHex(0x2A3036); });
+  CITY_LOD.cars[CITY_LOD.cars.length]=inst(cb,cars,function(c){ D.position.set(c[0],0.28,c[1]); D.rotation.set(0,-c[2],0); D.scale.set(4.5,0.78,1.8); col.setHex(pick(CARC,c[3]*3.7)); });
+  CITY_LOD.cars[CITY_LOD.cars.length]=inst(cb,cars,function(c){ D.position.set(c[0]-Math.cos(c[2])*0.2,1.06,c[1]-Math.sin(c[2])*0.2); D.rotation.set(0,-c[2],0); D.scale.set(2.4,0.58,1.62); col.setHex(0x2A3036); });
 
   window.__city={ms:Math.round(performance.now()-T0),buildings:nB,trees:trees.length,palms:palms.length,cars:cars.length,tris:tris,chunks:Object.keys(CH).length};
 })();
@@ -11197,12 +11265,16 @@ function drawMap(){
 
 /* ================================================================== input */
 var el=renderer.domElement;
+var touchMode=false, touchMove={f:0,st:0}, touchRun=false;
+function toggleFly(){ P.fly=!P.fly; P.vy=0;
+  feed(P.fly?(touchMode?'FLYING &#183; tap FLY to land':'FLYING &#183; press F to land'):'BACK ON THE GROUND'); }
+function mapZoom(){ mapIdx=(mapIdx+1)%MAPSIZES.length; MAPVIEW=MAPSIZES[mapIdx]; }
 function onKey(e,down){
   var k=e.code;
   keys[k]=down;
   if(!down) return;
-  if(k==='KeyF'&&started){ P.fly=!P.fly; P.vy=0; feed(P.fly?'FLYING &#183; press F to land':'BACK ON THE GROUND'); }
-  if(k==='KeyM'&&started){ mapIdx=(mapIdx+1)%MAPSIZES.length; MAPVIEW=MAPSIZES[mapIdx]; }
+  if(k==='KeyF'&&started) toggleFly();
+  if(k==='KeyM'&&started) mapZoom();
   if(k==='KeyT'&&started) teleport();
   if(k==='KeyH'&&started){ hudEl.classList.toggle('bare'); }
   if(k==='Space'&&started) e.preventDefault();
@@ -11229,6 +11301,77 @@ document.addEventListener('pointerlockchange',function(){
   if(started&&!locked&&lookMode==='pointer') pause();
 });
 document.addEventListener('pointerlockerror',function(){ lookMode='free'; });
+
+/* ---- touch: left thumb walks (a stick that appears where you put it down),
+   right thumb looks, and a few big buttons do what the keys do ---- */
+(function(){
+  var pad=document.getElementById('touch'), stick=document.getElementById('tstick'), knob=stick.querySelector('i');
+  var TOUCH_LOOK=1.75, SR=52, moveId=null, mx0=0, my0=0, looks={};
+  window.__setTouch=function(){
+    if(touchMode) return; touchMode=true; document.body.classList.add('touch');
+    if(document.pointerLockElement&&document.exitPointerLock) document.exitPointerLock();
+    lookMode='free';
+  };
+  if(window.matchMedia&&matchMedia('(pointer:coarse)').matches) window.__setTouch();
+  addEventListener('touchstart',window.__setTouch,{passive:true});
+  function home(){ stick.style.left=''; stick.style.top=''; stick.style.bottom=''; knob.style.transform=''; touchMove.f=0; touchMove.st=0; }
+  function setStick(x,y){
+    var dx=x-mx0, dy=y-my0, L=Math.hypot(dx,dy);
+    if(L>SR){ dx*=SR/L; dy*=SR/L; L=SR; }
+    knob.style.transform='translate('+dx+'px,'+dy+'px)';
+    var m=L/SR; if(m<0.14){ touchMove.f=0; touchMove.st=0; return; }
+    m=(m-0.14)/0.86; touchMove.f=-dy/L*m; touchMove.st=dx/L*m;
+  }
+  pad.addEventListener('touchstart',function(e){
+    e.preventDefault();
+    if(!started||paused) return;
+    for(var i=0;i<e.changedTouches.length;i++){
+      var t=e.changedTouches[i];
+      if(moveId===null&&t.clientX<innerWidth*0.45){
+        moveId=t.identifier; mx0=t.clientX; my0=t.clientY;
+        stick.style.left=(mx0-62)+'px'; stick.style.top=(my0-62)+'px'; stick.style.bottom='auto';
+      } else looks[t.identifier]=[t.clientX,t.clientY];
+    }
+  },{passive:false});
+  pad.addEventListener('touchmove',function(e){
+    e.preventDefault();
+    for(var i=0;i<e.changedTouches.length;i++){
+      var t=e.changedTouches[i], l=looks[t.identifier];
+      if(t.identifier===moveId) setStick(t.clientX,t.clientY);
+      else if(l){ if(started&&!paused) look((t.clientX-l[0])*TOUCH_LOOK,(t.clientY-l[1])*TOUCH_LOOK); l[0]=t.clientX; l[1]=t.clientY; }
+    }
+  },{passive:false});
+  function end(e){
+    e.preventDefault();
+    for(var i=0;i<e.changedTouches.length;i++){
+      var t=e.changedTouches[i];
+      if(t.identifier===moveId){ moveId=null; home(); }
+      delete looks[t.identifier];
+    }
+  }
+  pad.addEventListener('touchend',end,{passive:false});
+  pad.addEventListener('touchcancel',end,{passive:false});
+  window.__touchReset=function(){ moveId=null; looks={}; home(); keys.Space=false; keys.KeyC=false; };
+  /* buttons: tap ones fire once, hold ones act like a held key */
+  function tap(id,fn){ var b=document.getElementById(id);
+    b.addEventListener('touchstart',function(e){ e.preventDefault(); e.stopPropagation(); b.classList.add('down'); if(started&&!paused) fn(b); },{passive:false});
+    var up=function(e){ e.preventDefault(); e.stopPropagation(); b.classList.remove('down'); };
+    b.addEventListener('touchend',up,{passive:false}); b.addEventListener('touchcancel',up,{passive:false});
+    b.addEventListener('click',function(){ if(!touchMode&&started&&!paused) fn(b); });
+  }
+  function hold(id,key){ var b=document.getElementById(id);
+    b.addEventListener('touchstart',function(e){ e.preventDefault(); e.stopPropagation(); b.classList.add('down'); keys[key]=true; },{passive:false});
+    var up=function(e){ e.preventDefault(); e.stopPropagation(); b.classList.remove('down'); keys[key]=false; };
+    b.addEventListener('touchend',up,{passive:false}); b.addEventListener('touchcancel',up,{passive:false});
+  }
+  tap('tb-fly',function(){ toggleFly(); });
+  tap('tb-run',function(b){ touchRun=!touchRun; b.classList.toggle('on',touchRun); });
+  tap('tb-next',function(){ teleport(); });
+  tap('tb-map',function(){ mapZoom(); });
+  tap('tb-pause',function(){ pause(); });
+  hold('tb-up','Space'); hold('tb-dn','KeyC');
+  document.addEventListener('visibilitychange',function(){ if(document.hidden&&touchMode) pause(); });
+})();
 
 function feed(html){
   var f=document.getElementById('feed'), d=document.createElement('div');
@@ -11355,8 +11498,12 @@ function updatePlace(){
     if(nm){ elPlaceN.textContent=nm; elPlace.classList.add('on'); }
     else elPlace.classList.remove('on');
   }
-  if(SPOTS.length) elNext.textContent=SPOTS[(spotIdx+1)%SPOTS.length].name;
+  if(SPOTS.length){ var nn=SPOTS[(spotIdx+1)%SPOTS.length].name;
+    if(nn!==nextShown){ nextShown=nn; elNext.textContent=nn; elTNext.textContent=nn; } }
+  if(P.fly!==flyShown){ flyShown=P.fly; document.body.classList.toggle('flying',P.fly);
+    document.getElementById('tb-fly').classList.toggle('on',P.fly); }
 }
+var elTNext=document.getElementById('tnextName'), nextShown='', flyShown=false;
 
 /* =================================================================== loop */
 var clock=new T.Clock();
@@ -11374,12 +11521,13 @@ function update(dt){
   if(keys.ArrowDown)  P.pitch-=lk*0.62*dt;
   P.pitch=Math.max(-1.45,Math.min(1.45,P.pitch));
 
-  var f=(keys.KeyW?1:0)-(keys.KeyS?1:0), st=(keys.KeyD?1:0)-(keys.KeyA?1:0);
+  var f=(keys.KeyW?1:0)-(keys.KeyS?1:0)+touchMove.f, st=(keys.KeyD?1:0)-(keys.KeyA?1:0)+touchMove.st;
+  f=Math.max(-1,Math.min(1,f)); st=Math.max(-1,Math.min(1,st));
   var fx=-Math.sin(P.yaw), fz=-Math.cos(P.yaw), rx=Math.cos(P.yaw), rz=-Math.sin(P.yaw);
   var wx=fx*f+rx*st, wz=fz*f+rz*st, wl=Math.hypot(wx,wz);
-  if(wl>0){ wx/=wl; wz/=wl; }
+  if(wl>1){ wx/=wl; wz/=wl; }                 /* the touch stick is analogue: only cap it, never stretch it */
   P.crouch=!!(keys.ControlLeft||keys.ControlRight||keys.KeyC);
-  P.sprint=!!(keys.ShiftLeft||keys.ShiftRight)&&f>0&&!P.crouch;
+  P.sprint=!!(keys.ShiftLeft||keys.ShiftRight||touchRun)&&f>0.3&&!P.crouch;
   var spd=P.crouch?3.0:(P.sprint?9.6:5.4);
   if(P.fly) spd=P.sprint?52:20;
 
@@ -11432,21 +11580,49 @@ function update(dt){
       fl.rotation.y=ft*0.6+ph; } }
 
   mapTick+=dt; if(mapTick>0.05){ mapTick=0; drawMap(); updatePlace(); }
+  cullFar(dt);
 }
 
-/* keep it smooth on a modest laptop: drop resolution before dropping the campus */
-var qPR=Math.min(devicePixelRatio||1,2), qAcc=0, qFrames=0, qStep=0;
-function quality(dt){
-  if(!started||paused||qStep>=2) return;
+/* ---- keeping it smooth -------------------------------------------------
+   Two things. First, nothing past the fog is drawn: the world and city chunks
+   are switched off by distance a few times a second. Second, a ladder: if the
+   frame rate stays under 27 for a few seconds it steps down one rung, giving
+   up resolution and shadows first, then the far city's cars and trees and
+   some view distance. It only ever steps down, so it cannot flicker. */
+var QT=[{pr:2,   sh:2048, tree:1,    palm:1,    car:1, fog:1600},
+        {pr:1,   sh:1024, tree:1,    palm:1,    car:1, fog:1600},
+        {pr:1,   sh:1024, tree:0.5,  palm:0.6,  car:0, fog:1250},
+        {pr:0.8, sh:0,    tree:0.25, palm:0.35, car:0, fog:1000},
+        {pr:0.65,sh:0,    tree:0,    palm:0.2,  car:0, fog:820}];
+var QL=0, qPR=Math.min(devicePixelRatio||1,2), qAcc=0, qFrames=0, qWarm=0, qShadow=2048;
+function lodSet(list,frac){ for(var i=0;i<list.length;i++){ var im=list[i]; if(!im) continue;
+  if(im.userData.full===undefined) im.userData.full=im.count;
+  im.count=Math.ceil(im.userData.full*frac); im.visible=im.count>0; } }
+function applyQ(n){
+  QL=Math.max(0,Math.min(QT.length-1,n)); var q=QT[QL];
+  qPR=Math.min(devicePixelRatio||1,q.pr,touchMode?1.5:2);
+  renderer.setPixelRatio(qPR); renderer.setSize(innerWidth,innerHeight);
+  if(q.sh!==qShadow){ qShadow=q.sh;
+    if(q.sh){ sun.castShadow=true; sun.shadow.mapSize.set(q.sh,q.sh); if(sun.shadow.map){ sun.shadow.map.dispose(); sun.shadow.map=null; } }
+    else sun.castShadow=false; }
+  lodSet(CITY_LOD.trees,q.tree); lodSet(CITY_LOD.palms,q.palm); lodSet(CITY_LOD.cars,q.car);
+  scene.fog.far=q.fog; cullTick=9;
+}
+var qLast=0;
+function quality(){
+  var now=performance.now(), dt=Math.min(1,(now-qLast)/1000); qLast=now;      /* real time, not the clamped step */
+  if(!started||paused||window.__noq||QL>=QT.length-1) return;
+  if(qWarm<1.5){ qWarm+=dt; return; }             /* let the first frames compile and settle */
   qAcc+=dt; qFrames++;
-  if(qAcc<3) return;
+  if(qAcc<2.5) return;
   var fps=qFrames/qAcc; qAcc=0; qFrames=0;
-  if(fps<30){
-    qStep++; qPR=qStep===1?1:0.75;
-    if(qStep===1){ sun.shadow.mapSize.set(1024,1024); if(sun.shadow.map){ sun.shadow.map.dispose(); sun.shadow.map=null; } }
-    if(qStep===2){ sun.castShadow=false; }
-    renderer.setPixelRatio(qPR); renderer.setSize(innerWidth,innerHeight);
-  } else qStep=2;
+  if(fps<27){ applyQ(QL+1); qWarm=0.5; }
+}
+var CULL=[], cullTick=9;
+function cullFar(dt){
+  cullTick+=dt; if(cullTick<0.3) return; cullTick=0;
+  var R=scene.fog.far+60+Math.max(0,P.y)*0.5;
+  for(var i=0;i<CULL.length;i++){ var c=CULL[i]; c[0].visible=Math.hypot(c[1]-P.x,c[2]-P.z)-c[3]<R; }
 }
 function frame(){
   requestAnimationFrame(frame);
@@ -11462,7 +11638,8 @@ function begin(){
   audioInit(); if(AC&&AC.state==='suspended') AC.resume();
   started=true; paused=false;
   startEl.classList.add('off'); pauseEl.classList.add('off'); hudEl.classList.remove('hide');
-  if(el.requestPointerLock){
+  document.body.classList.add('playing');
+  if(el.requestPointerLock&&!touchMode){
     lookMode='pointer';
     try{ el.requestPointerLock(); }catch(e){ lookMode='free'; }
     setTimeout(function(){ if(document.pointerLockElement!==el) lookMode='free'; },420);
@@ -11471,13 +11648,13 @@ function begin(){
 }
 function pause(){
   if(!started||paused) return;
-  paused=true; keys={};
+  paused=true; keys={}; if(window.__touchReset) window.__touchReset();
   pauseEl.classList.remove('off');
   if(document.exitPointerLock&&document.pointerLockElement) document.exitPointerLock();
 }
 function unpause(){
-  paused=false; pauseEl.classList.add('off'); clock.getDelta();
-  if(lookMode==='pointer'&&el.requestPointerLock){ try{ el.requestPointerLock(); }catch(e){} }
+  paused=false; pauseEl.classList.add('off'); clock.getDelta(); qAcc=0; qFrames=0; qWarm=0;
+  if(!touchMode&&lookMode==='pointer'&&el.requestPointerLock){ try{ el.requestPointerLock(); }catch(e){} }
 }
 document.getElementById('play').addEventListener('click',begin);
 document.getElementById('resume').addEventListener('click',unpause);
@@ -11489,6 +11666,9 @@ addEventListener('resize',function(){
   camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
   renderer.setPixelRatio(qPR); renderer.setSize(innerWidth,innerHeight);
 });
+addEventListener('orientationchange',function(){ setTimeout(function(){
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setPixelRatio(qPR); renderer.setSize(innerWidth,innerHeight); },250); });
 
 /* who casts and who catches shadows */
 scene.traverse(function(o){
@@ -11499,6 +11679,12 @@ scene.traverse(function(o){
   else if(o.isInstancedMesh && !m.transparent && !o.userData.noShadow){ o.castShadow=true; }
   else if(GROUND_MESHES.indexOf(o)>=0){ o.receiveShadow=true; }
 });
+scene.traverse(function(o){
+  if(!o.isMesh||o.isInstancedMesh||!(o.userData.chunk!==undefined||o.userData.city)) return;
+  var b=o.geometry.boundingSphere; if(!b){ o.geometry.computeBoundingSphere(); b=o.geometry.boundingSphere; }
+  CULL.push([o,b.center.x,b.center.z,b.radius]);
+});
+if(touchMode) applyQ(1);                          /* phones and tablets start one rung down */
 /* --------------------------------------------------------------- boot ---- */
 document.getElementById('bcount').textContent=CAMPUS.length.toLocaleString();
 document.getElementById('ccount').textContent=BUILDINGS.length.toLocaleString();

@@ -13,6 +13,7 @@
      and the Santa Monica Freeway (10) across the north.
    Everything inside the OSM rectangle (LG) is left to the real data.
    ================================================================== */
+var CITY_LOD={trees:[],palms:[],cars:[]};   /* instanced sets the frame-rate guard can thin, nearest kept longest */
 (function(){
   var T0=performance.now();
   var TAU=Math.PI*2, RALL=2500, RFINE=1400;
@@ -296,10 +297,12 @@
   var tris=0;
   for(var k in CH){
     var C=CH[k];
-    if(C.M.count()){ var m=new T.Mesh(C.M.geom(),matWorld); m.userData.noShadow=true; scene.add(m); tris+=C.M.count(); }
-    if(C.G.count()){ var g=new T.Mesh(C.G.geom(),matGround); g.userData.noShadow=true; scene.add(g); tris+=C.G.count(); }
+    if(C.M.count()){ var m=new T.Mesh(C.M.geom(),matWorld); m.userData.noShadow=true; m.userData.city=1; scene.add(m); tris+=C.M.count(); }
+    if(C.G.count()){ var g=new T.Mesh(C.G.geom(),matGround); g.userData.noShadow=true; g.userData.city=1; scene.add(g); tris+=C.G.count(); }
   }
   var D=new T.Object3D(), col=new T.Color();
+  var byDist=function(p,q){ return (p[0]*p[0]+p[1]*p[1])-(q[0]*q[0]+q[1]*q[1]); };
+  trees.sort(byDist); palms.sort(byDist); cars.sort(byDist);
   function inst(geo,list,fn,mat){
     if(!list.length) return null;
     var im=new T.InstancedMesh(geo,mat||new T.MeshLambertMaterial({color:0xFFFFFF,flatShading:true}),list.length);
@@ -310,8 +313,8 @@
   /* shade trees */
   var crown=new T.IcosahedronGeometry(1,0), trunk=new T.CylinderGeometry(0.16,0.26,1,5,1,true); trunk.translate(0,0.5,0);
   var LEAF=[0x3E7A34,0x4E8A3A,0x5C9440,0x39702F,0x6A9A48,0x2F6630];
-  inst(trunk,trees,function(t){ D.position.set(t[0],0,t[1]); D.rotation.set(0,0,0); D.scale.set(t[2]*0.55,t[3]*0.62,t[2]*0.55); col.setHex(0x6B5845); });
-  inst(crown,trees,function(t){ D.position.set(t[0],t[3]*0.62+t[2]*0.55,t[1]); D.rotation.set(0,t[4]*6,0);
+  CITY_LOD.trees[CITY_LOD.trees.length]=inst(trunk,trees,function(t){ D.position.set(t[0],0,t[1]); D.rotation.set(0,0,0); D.scale.set(t[2]*0.55,t[3]*0.62,t[2]*0.55); col.setHex(0x6B5845); });
+  CITY_LOD.trees[CITY_LOD.trees.length]=inst(crown,trees,function(t){ D.position.set(t[0],t[3]*0.62+t[2]*0.55,t[1]); D.rotation.set(0,t[4]*6,0);
     D.scale.set(t[2],t[2]*0.82,t[2]); col.setHex(pick(LEAF,t[4])).multiplyScalar(0.9+t[4]*0.2); });
   /* fan palms: a thin trunk and a burst of fronds */
   var pt=new T.CylinderGeometry(0.17,0.26,1,5); pt.translate(0,0.5,0);
@@ -320,14 +323,14 @@
       P.push(0,0,0, bx*2.1-bz*0.7,up,bz*2.1+bx*0.7, bx*2.1+bz*0.7,up,bz*2.1-bx*0.7);
       P.push(0,0,0, bx*2.1+bz*0.7,up,bz*2.1-bx*0.7, bx*2.1-bz*0.7,up,bz*2.1+bx*0.7); }
     var g=new T.BufferGeometry(); g.setAttribute('position',new T.Float32BufferAttribute(P,3)); g.computeVertexNormals(); return g; })();
-  inst(pt,palms,function(p){ D.position.set(p[0],0,p[1]); D.rotation.set(0,0,0); D.scale.set(1,p[2],1); col.setHex(0x8A7862); });
-  inst(fr,palms,function(p){ D.position.set(p[0],p[2],p[1]); D.rotation.set(0,p[0],0); D.scale.set(1.3,1.3,1.3); col.setHex(0x4F7A36); },
+  CITY_LOD.palms[CITY_LOD.palms.length]=inst(pt,palms,function(p){ D.position.set(p[0],0,p[1]); D.rotation.set(0,0,0); D.scale.set(1,p[2],1); col.setHex(0x8A7862); });
+  CITY_LOD.palms[CITY_LOD.palms.length]=inst(fr,palms,function(p){ D.position.set(p[0],p[2],p[1]); D.rotation.set(0,p[0],0); D.scale.set(1.3,1.3,1.3); col.setHex(0x4F7A36); },
        new T.MeshLambertMaterial({color:0xFFFFFF,side:T.DoubleSide,flatShading:true}));
   /* parked cars */
   var CARC=[0xF2F2F0,0x1E1E20,0x8A8D91,0xB7BABD,0x9C1C22,0x1F3B6B,0xE9E4D8,0x3C4A3E,0x5B5F63,0xC9A227,0x2F2F31,0x6D2E1F];
   var cb=new T.BoxGeometry(1,1,1); cb.translate(0,0.5,0);
-  inst(cb,cars,function(c){ D.position.set(c[0],0.28,c[1]); D.rotation.set(0,-c[2],0); D.scale.set(4.5,0.78,1.8); col.setHex(pick(CARC,c[3]*3.7)); });
-  inst(cb,cars,function(c){ D.position.set(c[0]-Math.cos(c[2])*0.2,1.06,c[1]-Math.sin(c[2])*0.2); D.rotation.set(0,-c[2],0); D.scale.set(2.4,0.58,1.62); col.setHex(0x2A3036); });
+  CITY_LOD.cars[CITY_LOD.cars.length]=inst(cb,cars,function(c){ D.position.set(c[0],0.28,c[1]); D.rotation.set(0,-c[2],0); D.scale.set(4.5,0.78,1.8); col.setHex(pick(CARC,c[3]*3.7)); });
+  CITY_LOD.cars[CITY_LOD.cars.length]=inst(cb,cars,function(c){ D.position.set(c[0]-Math.cos(c[2])*0.2,1.06,c[1]-Math.sin(c[2])*0.2); D.rotation.set(0,-c[2],0); D.scale.set(2.4,0.58,1.62); col.setHex(0x2A3036); });
 
   window.__city={ms:Math.round(performance.now()-T0),buildings:nB,trees:trees.length,palms:palms.length,cars:cars.length,tris:tris,chunks:Object.keys(CH).length};
 })();

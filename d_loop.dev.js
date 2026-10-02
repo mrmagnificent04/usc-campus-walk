@@ -117,8 +117,12 @@ function updatePlace(){
     if(nm){ elPlaceN.textContent=nm; elPlace.classList.add('on'); }
     else elPlace.classList.remove('on');
   }
-  if(SPOTS.length) elNext.textContent=SPOTS[(spotIdx+1)%SPOTS.length].name;
+  if(SPOTS.length){ var nn=SPOTS[(spotIdx+1)%SPOTS.length].name;
+    if(nn!==nextShown){ nextShown=nn; elNext.textContent=nn; elTNext.textContent=nn; } }
+  if(P.fly!==flyShown){ flyShown=P.fly; document.body.classList.toggle('flying',P.fly);
+    document.getElementById('tb-fly').classList.toggle('on',P.fly); }
 }
+var elTNext=document.getElementById('tnextName'), nextShown='', flyShown=false;
 
 /* =================================================================== loop */
 var clock=new T.Clock();
@@ -136,12 +140,13 @@ function update(dt){
   if(keys.ArrowDown)  P.pitch-=lk*0.62*dt;
   P.pitch=Math.max(-1.45,Math.min(1.45,P.pitch));
 
-  var f=(keys.KeyW?1:0)-(keys.KeyS?1:0), st=(keys.KeyD?1:0)-(keys.KeyA?1:0);
+  var f=(keys.KeyW?1:0)-(keys.KeyS?1:0)+touchMove.f, st=(keys.KeyD?1:0)-(keys.KeyA?1:0)+touchMove.st;
+  f=Math.max(-1,Math.min(1,f)); st=Math.max(-1,Math.min(1,st));
   var fx=-Math.sin(P.yaw), fz=-Math.cos(P.yaw), rx=Math.cos(P.yaw), rz=-Math.sin(P.yaw);
   var wx=fx*f+rx*st, wz=fz*f+rz*st, wl=Math.hypot(wx,wz);
-  if(wl>0){ wx/=wl; wz/=wl; }
+  if(wl>1){ wx/=wl; wz/=wl; }                 /* the touch stick is analogue: only cap it, never stretch it */
   P.crouch=!!(keys.ControlLeft||keys.ControlRight||keys.KeyC);
-  P.sprint=!!(keys.ShiftLeft||keys.ShiftRight)&&f>0&&!P.crouch;
+  P.sprint=!!(keys.ShiftLeft||keys.ShiftRight||touchRun)&&f>0.3&&!P.crouch;
   var spd=P.crouch?3.0:(P.sprint?9.6:5.4);
   if(P.fly) spd=P.sprint?52:20;
 
@@ -197,21 +202,49 @@ function update(dt){
       fl.rotation.y=ft*0.6+ph; } }
 
   mapTick+=dt; if(mapTick>0.05){ mapTick=0; drawMap(); updatePlace(); }
+  cullFar(dt);
 }
 
-/* keep it smooth on a modest laptop: drop resolution before dropping the campus */
-var qPR=Math.min(devicePixelRatio||1,2), qAcc=0, qFrames=0, qStep=0;
-function quality(dt){
-  if(!started||paused||qStep>=2) return;
+/* ---- keeping it smooth -------------------------------------------------
+   Two things. First, nothing past the fog is drawn: the world and city chunks
+   are switched off by distance a few times a second. Second, a ladder: if the
+   frame rate stays under 27 for a few seconds it steps down one rung, giving
+   up resolution and shadows first, then the far city's cars and trees and
+   some view distance. It only ever steps down, so it cannot flicker. */
+var QT=[{pr:2,   sh:2048, tree:1,    palm:1,    car:1, fog:1600},
+        {pr:1,   sh:1024, tree:1,    palm:1,    car:1, fog:1600},
+        {pr:1,   sh:1024, tree:0.5,  palm:0.6,  car:0, fog:1250},
+        {pr:0.8, sh:0,    tree:0.25, palm:0.35, car:0, fog:1000},
+        {pr:0.65,sh:0,    tree:0,    palm:0.2,  car:0, fog:820}];
+var QL=0, qPR=Math.min(devicePixelRatio||1,2), qAcc=0, qFrames=0, qWarm=0, qShadow=2048;
+function lodSet(list,frac){ for(var i=0;i<list.length;i++){ var im=list[i]; if(!im) continue;
+  if(im.userData.full===undefined) im.userData.full=im.count;
+  im.count=Math.ceil(im.userData.full*frac); im.visible=im.count>0; } }
+function applyQ(n){
+  QL=Math.max(0,Math.min(QT.length-1,n)); var q=QT[QL];
+  qPR=Math.min(devicePixelRatio||1,q.pr,touchMode?1.5:2);
+  renderer.setPixelRatio(qPR); renderer.setSize(innerWidth,innerHeight);
+  if(q.sh!==qShadow){ qShadow=q.sh;
+    if(q.sh){ sun.castShadow=true; sun.shadow.mapSize.set(q.sh,q.sh); if(sun.shadow.map){ sun.shadow.map.dispose(); sun.shadow.map=null; } }
+    else sun.castShadow=false; }
+  lodSet(CITY_LOD.trees,q.tree); lodSet(CITY_LOD.palms,q.palm); lodSet(CITY_LOD.cars,q.car);
+  scene.fog.far=q.fog; cullTick=9;
+}
+var qLast=0;
+function quality(){
+  var now=performance.now(), dt=Math.min(1,(now-qLast)/1000); qLast=now;      /* real time, not the clamped step */
+  if(!started||paused||window.__noq||QL>=QT.length-1) return;
+  if(qWarm<1.5){ qWarm+=dt; return; }             /* let the first frames compile and settle */
   qAcc+=dt; qFrames++;
-  if(qAcc<3) return;
+  if(qAcc<2.5) return;
   var fps=qFrames/qAcc; qAcc=0; qFrames=0;
-  if(fps<30){
-    qStep++; qPR=qStep===1?1:0.75;
-    if(qStep===1){ sun.shadow.mapSize.set(1024,1024); if(sun.shadow.map){ sun.shadow.map.dispose(); sun.shadow.map=null; } }
-    if(qStep===2){ sun.castShadow=false; }
-    renderer.setPixelRatio(qPR); renderer.setSize(innerWidth,innerHeight);
-  } else qStep=2;
+  if(fps<27){ applyQ(QL+1); qWarm=0.5; }
+}
+var CULL=[], cullTick=9;
+function cullFar(dt){
+  cullTick+=dt; if(cullTick<0.3) return; cullTick=0;
+  var R=scene.fog.far+60+Math.max(0,P.y)*0.5;
+  for(var i=0;i<CULL.length;i++){ var c=CULL[i]; c[0].visible=Math.hypot(c[1]-P.x,c[2]-P.z)-c[3]<R; }
 }
 function frame(){
   requestAnimationFrame(frame);
@@ -227,7 +260,8 @@ function begin(){
   audioInit(); if(AC&&AC.state==='suspended') AC.resume();
   started=true; paused=false;
   startEl.classList.add('off'); pauseEl.classList.add('off'); hudEl.classList.remove('hide');
-  if(el.requestPointerLock){
+  document.body.classList.add('playing');
+  if(el.requestPointerLock&&!touchMode){
     lookMode='pointer';
     try{ el.requestPointerLock(); }catch(e){ lookMode='free'; }
     setTimeout(function(){ if(document.pointerLockElement!==el) lookMode='free'; },420);
@@ -236,13 +270,13 @@ function begin(){
 }
 function pause(){
   if(!started||paused) return;
-  paused=true; keys={};
+  paused=true; keys={}; if(window.__touchReset) window.__touchReset();
   pauseEl.classList.remove('off');
   if(document.exitPointerLock&&document.pointerLockElement) document.exitPointerLock();
 }
 function unpause(){
-  paused=false; pauseEl.classList.add('off'); clock.getDelta();
-  if(lookMode==='pointer'&&el.requestPointerLock){ try{ el.requestPointerLock(); }catch(e){} }
+  paused=false; pauseEl.classList.add('off'); clock.getDelta(); qAcc=0; qFrames=0; qWarm=0;
+  if(!touchMode&&lookMode==='pointer'&&el.requestPointerLock){ try{ el.requestPointerLock(); }catch(e){} }
 }
 document.getElementById('play').addEventListener('click',begin);
 document.getElementById('resume').addEventListener('click',unpause);
@@ -254,6 +288,9 @@ addEventListener('resize',function(){
   camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
   renderer.setPixelRatio(qPR); renderer.setSize(innerWidth,innerHeight);
 });
+addEventListener('orientationchange',function(){ setTimeout(function(){
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setPixelRatio(qPR); renderer.setSize(innerWidth,innerHeight); },250); });
 
 /* who casts and who catches shadows */
 scene.traverse(function(o){
@@ -264,6 +301,12 @@ scene.traverse(function(o){
   else if(o.isInstancedMesh && !m.transparent && !o.userData.noShadow){ o.castShadow=true; }
   else if(GROUND_MESHES.indexOf(o)>=0){ o.receiveShadow=true; }
 });
+scene.traverse(function(o){
+  if(!o.isMesh||o.isInstancedMesh||!(o.userData.chunk!==undefined||o.userData.city)) return;
+  var b=o.geometry.boundingSphere; if(!b){ o.geometry.computeBoundingSphere(); b=o.geometry.boundingSphere; }
+  CULL.push([o,b.center.x,b.center.z,b.radius]);
+});
+if(touchMode) applyQ(1);                          /* phones and tablets start one rung down */
 /* --------------------------------------------------------------- boot ---- */
 document.getElementById('bcount').textContent=CAMPUS.length.toLocaleString();
 document.getElementById('ccount').textContent=BUILDINGS.length.toLocaleString();
@@ -280,6 +323,8 @@ document.getElementById('scount').textContent=CROWD_N.toLocaleString();
   },170);
 })();
 window.__dbg={TREE_POS:TREE_POS,CAMPUS:CAMPUS,scene:scene,lawnAt:lawnAt,inPlaza:inPlaza,renderer:renderer,sun:sun,T:T,camera:camera,P:P,groundAt:groundAt};
+window.__q=function(n){ if(n===undefined) return QL; applyQ(n); return QL; };
+window.__cull=function(){ var v=0; for(var i=0;i<CULL.length;i++) if(CULL[i][0].visible) v++; return [v,CULL.length]; };
 window.__cam=function(x,y,z,tx,ty,tz){
   var dx=tx-x, dy=ty-y, dz=tz-z, hL=Math.hypot(dx,dz)||1e-6;
   window.__lock=[x,y,z, Math.atan2(-dx,-dz), Math.atan2(dy,hL)];

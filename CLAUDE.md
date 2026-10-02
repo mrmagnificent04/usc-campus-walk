@@ -75,6 +75,17 @@ around the rose garden. Chromium occasionally crashes ("Target crashed"); just r
 - Leavey Library, Doheny Memorial Library, Taper Hall, Zumberge Hall, Fertitta Hall,
   Dr. Joseph Medicine Crow Center (DMC; formerly Von KleinSmid) in `a_world.js` CUSTOM.
 
+## Touch and performance
+
+- Touch (`c_main.js`, markup and CSS in `head.html`): `body.touch` is set for coarse pointers or on
+  the first touch. Left thumb is a floating stick feeding `touchMove` (analogue), right thumb drags
+  to look, buttons: RUN, FLY, up/down while flying, NEXT STOP, pause, tap the map to zoom.
+- Frame-rate ladder (`d_loop.*.js`, `QT`/`applyQ`/`quality`): under 27 fps for 2.5 s steps down one
+  rung (pixel ratio, shadow size, then city cars/trees via `CITY_LOD`, fog distance). Never steps up.
+  Touch devices start on rung 1. `cullFar` hides world and city chunks beyond the fog.
+- Dev hooks: `window.__q(n)` sets a rung, `window.__cull()` reports visible chunks, `window.__noq=1`
+  freezes the ladder (snap.js sets it so screenshots stay at full quality).
+
 ## Jamie's standing requests (do not undo)
 
 - Walkways: simple gray concrete with a brick edge. No street trees on walkways, no bikes,
@@ -87,6 +98,6 @@ around the rose garden. Chromium occasionally crashes ("Target crashed"); just r
 
 ## Publishing
 
-The live artifact is https://claude.ai/artifact/Jd3u1kv8vcGABwVjfZZHCz (version 21 as of
+The live artifact is https://claude.ai/artifact/Jd3u1kv8vcGABwVjfZZHCz (version 22 as of
 this handoff). Publishing there needs the Artifact tool from a Claude session. From
 Claude Code, rebuild `index.html` and push to GitHub; Vercel redeploys from `main`.
