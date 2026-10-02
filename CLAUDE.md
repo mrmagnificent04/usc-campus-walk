@@ -86,6 +86,14 @@ around the rose garden. Chromium occasionally crashes ("Target crashed"); just r
 - Dev hooks: `window.__q(n)` sets a rung, `window.__cull()` reports visible chunks, `window.__noq=1`
   freezes the ladder (snap.js sets it so screenshots stay at full quality).
 
+## Title screen
+
+- The start screen is transparent over the live scene. `attract()` in `d_loop.*.js` flies the camera
+  through the `ATT` list (from, to, look from, look to, seconds) with a fade (`#afade`) between
+  shots, and keeps the crowd, culling and sun running. `begin()` resets the camera. Enter starts.
+- Title type is Libre Caslon Text Bold (OFL), embedded as base64 in `head.html` as 'USC Caslon'.
+- Dev hook: `window.__attract(i,t)` pins shot i at time t for screenshots; no args unpins.
+
 ## Jamie's standing requests (do not undo)
 
 - Walkways: simple gray concrete with a brick edge. No street trees on walkways, no bikes,
@@ -98,6 +106,6 @@ around the rose garden. Chromium occasionally crashes ("Target crashed"); just r
 
 ## Publishing
 
-The live artifact is https://claude.ai/artifact/Jd3u1kv8vcGABwVjfZZHCz (version 22 as of
+The live artifact is https://claude.ai/artifact/Jd3u1kv8vcGABwVjfZZHCz (version 23 as of
 this handoff). Publishing there needs the Artifact tool from a Claude session. From
 Claude Code, rebuild `index.html` and push to GitHub; Vercel redeploys from `main`.

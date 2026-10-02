@@ -233,7 +233,7 @@ function applyQ(n){
 var qLast=0;
 function quality(){
   var now=performance.now(), dt=Math.min(1,(now-qLast)/1000); qLast=now;      /* real time, not the clamped step */
-  if(!started||paused||window.__noq||QL>=QT.length-1) return;
+  if(paused||window.__noq||QL>=QT.length-1) return;        /* it watches the title screen too */
   if(qWarm<1.5){ qWarm+=dt; return; }             /* let the first frames compile and settle */
   qAcc+=dt; qFrames++;
   if(qAcc<2.5) return;
@@ -246,10 +246,42 @@ function cullFar(dt){
   var R=scene.fog.far+60+Math.max(0,P.y)*0.5;
   for(var i=0;i<CULL.length;i++){ var c=CULL[i]; c[0].visible=Math.hypot(c[1]-P.x,c[2]-P.z)-c[3]<R; }
 }
+/* ---- the title screen: a slow flight between places where students are walking ---- */
+var ATT=[ /* from [x,y,z], to [x,y,z], look from [x,y,z], look to [x,y,z], seconds */
+  [[ 64, 30,  88],[ 30, 21,  62],[  2,  7,   4],[ -6, 10,  -8],11],     /* Tommy Trojan and Bovard */
+  [[-12, 16, 150],[  2, 30,  52],[ 10,  2,  60],[ 16,  4, -40],12],     /* up Trousdale */
+  [[214, 30,  34],[198, 19,  -8],[222,  3, -60],[238,  9, -92],11],     /* McCarthy Quad to Leavey */
+  [[ 98, 26, -40],[ 60, 34, -78],[ 46,  8,-112],[ 28, 12,-128],11],     /* Alumni Park and Doheny */
+  [[ 36, 40,-452],[ 62, 26,-488],[ 20,  4,-512],[ 30,  6,-520],10],     /* USC Village */
+  [[ 20, 50, 468],[-70, 34, 428],[-150, 3, 384],[-236, 16, 383],12],    /* the Rose Garden and the museum dome */
+  [[104, 66,  52],[150, 50, -10],[330, 84,-300],[467, 78,-420],11]      /* over campus to downtown */
+];
+var attI=0, attT=0, attPin=null, attEl=document.getElementById('afade'), _al=new T.Vector3(), attO=1;
+function attract(dt){
+  attT+=dt; var S=ATT[attI];
+  if(attT>=S[4]){ attT=0; attI=(attI+1)%ATT.length; S=ATT[attI]; }
+  if(attPin){ attI=attPin[0]; attT=attPin[1]; S=ATT[attI]; }
+  var k=attT/S[4], e=k*k*(3-2*k), a=S[0], b=S[1], la=S[2], lb=S[3];
+  camera.position.set(a[0]+(b[0]-a[0])*e,a[1]+(b[1]-a[1])*e,a[2]+(b[2]-a[2])*e);
+  _al.set(la[0]+(lb[0]-la[0])*e,la[1]+(lb[1]-la[1])*e,la[2]+(lb[2]-la[2])*e);
+  camera.lookAt(_al);
+  if(Math.abs(camera.fov-62)>0.01){ camera.fov=62; camera.updateProjectionMatrix(); }
+  var o=Math.max(0,1-attT/1.1,(attT-(S[4]-1.1))/1.1); o=o*o*(3-2*o);
+  if(Math.abs(o-attO)>0.004){ attO=o; attEl.style.opacity=o.toFixed(3); }
+  /* the world is culled and lit round the player, so stand them where the camera is looking */
+  var sx=P.x, sy=P.y, sz=P.z;
+  P.x=camera.position.x; P.z=camera.position.z; P.y=camera.position.y;
+  cullFar(dt); placeSun(_al.x,_al.z);
+  P.x=sx; P.y=sy; P.z=sz;
+  updateCrowd(dt);
+  if(COL_FLAMES.length){ var ft=clock.elapsedTime;
+    for(var fi=0;fi<COL_FLAMES.length;fi++){ var fl=COL_FLAMES[fi];
+      fl.scale.y=1+0.22*Math.sin(ft*9.1+fl.userData.ph*2.3); fl.rotation.y=ft*0.6+fl.userData.ph; } }
+}
 function frame(){
   requestAnimationFrame(frame);
   var dt=Math.min(0.06,clock.getDelta());
-  if(started&&!paused) update(dt);
+  if(started&&!paused) update(dt); else if(!started) attract(dt);
   renderer.render(scene,camera);
   quality(dt);
 }
@@ -259,6 +291,7 @@ var startEl=document.getElementById('start'), pauseEl=document.getElementById('p
 function begin(){
   audioInit(); if(AC&&AC.state==='suspended') AC.resume();
   started=true; paused=false;
+  attEl.style.opacity=0; camera.fov=fovCur=BASE_FOV; camera.updateProjectionMatrix(); cullTick=9; qAcc=0; qFrames=0; qWarm=0;
   startEl.classList.add('off'); pauseEl.classList.add('off'); hudEl.classList.remove('hide');
   document.body.classList.add('playing');
   if(el.requestPointerLock&&!touchMode){
@@ -281,6 +314,8 @@ function unpause(){
 document.getElementById('play').addEventListener('click',begin);
 document.getElementById('resume').addEventListener('click',unpause);
 addEventListener('keydown',function(e){
+  if((e.code==='Enter'||e.code==='NumpadEnter')&&!started&&!document.getElementById('play').disabled){ e.preventDefault(); begin(); return; }
+  if((e.code==='Enter'||e.code==='NumpadEnter')&&paused){ e.preventDefault(); unpause(); return; }
   if(e.code!=='Escape'||!started) return;
   if(paused) unpause(); else pause();
 });
@@ -319,12 +354,14 @@ document.getElementById('scount').textContent=CROWD_N.toLocaleString();
              'BRINGING '+CROWD_N+' STUDENTS TO CLASS','READY'];
   var iv=setInterval(function(){
     n++; bar.style.width=Math.min(100,n*25)+'%'; txt.textContent=steps[Math.min(3,n-1)];
-    if(n>=4){ clearInterval(iv); btn.disabled=false; btn.textContent='START WALKING'; }
+    if(n>=4){ clearInterval(iv); btn.disabled=false; startEl.classList.add('ready');
+      btn.innerHTML=touchMode?'TAP TO START':'START WALKING <kbd>ENTER</kbd>'; }
   },170);
 })();
 window.__dbg={TREE_POS:TREE_POS,CAMPUS:CAMPUS,scene:scene,lawnAt:lawnAt,inPlaza:inPlaza,renderer:renderer,sun:sun,T:T,camera:camera,P:P,groundAt:groundAt};
 window.__q=function(n){ if(n===undefined) return QL; applyQ(n); return QL; };
 window.__cull=function(){ var v=0; for(var i=0;i<CULL.length;i++) if(CULL[i][0].visible) v++; return [v,CULL.length]; };
+window.__attract=function(i,t){ attPin=(i===undefined)?null:[i,t]; };
 window.__cam=function(x,y,z,tx,ty,tz){
   var dx=tx-x, dy=ty-y, dz=tz-z, hL=Math.hypot(dx,dz)||1e-6;
   window.__lock=[x,y,z, Math.atan2(-dx,-dz), Math.atan2(dy,hL)];
