@@ -16,17 +16,10 @@ skyline on the horizon. It lowers its own detail if the frame rate drops.
   concatenated in order by `build.sh`.
 - `CLAUDE.md` explains the code, the build and the testing tools in detail.
 
-## Updating the site
+## Updating  site
 
 ```
 ./build.sh               # builds game.html from the sources
 python3 make_deploy.py   # turns game.html into index.html
 git add -A && git commit -m "..." && git push
 ```
-
-## Deploying to Vercel
-
-It is a single static page: no framework, no build command, no server code.
-Import this repo at vercel.com/new, leave the framework preset as "Other" and every
-build setting blank, and deploy. Pushes to `main` redeploy automatically.
-`vercel.json` only turns off long caching so updates show up right away.
