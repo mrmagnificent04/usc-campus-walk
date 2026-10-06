@@ -300,8 +300,8 @@ var LAND_STATS={};
       G('strel',strel,0xFFFFFF).list.push([x3,z3,0,rr(0.9,1.2),0]);
       continue;
     }
-    if(kind===1){
-      if(hsh<0.6){
+    if(kind===1||kind===3){                    /* 3 is always a Canary date palm */
+      if(kind===1&&hsh<0.6){
         var ph=rr(13,21);
         G('fanT',fanT,0x8C7A5E).list.push([x3,z3,ph,0.9+hsh*0.3,1]);
         G('fanC',fanC,0xFFFFFF).list.push([x3,z3,ph,1.25,0]);

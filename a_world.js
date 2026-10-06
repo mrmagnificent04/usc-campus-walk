@@ -1098,6 +1098,9 @@ function(M,B,ring,c,d){
 }
 };
 CUSTOM['Jill & Frank Fertitta Hall']=CUSTOM['Fertitta Hall'];
+/* built by hand in a2i_halls.js: the generic pass leaves these footprints empty */
+var HAND_HALLS={'Grace Ford Salvatori Hall':14,'Michelson Hall':22};
+Object.keys(HAND_HALLS).forEach(function(nm){ CUSTOM[nm]=function(M,B){ B.hand=1; return HAND_HALLS[nm]; }; });
 CUSTOM['Arts and Humanities Residential College at Parkside']=CUSTOM['Parkside Apartments'];
 
 /* ---------- Hoffman Hall ---------- */
@@ -2871,6 +2874,8 @@ if(SCI.main){
   if(SCI.imax) NO_PLANT.push(offsetRing(SCI.imax.ring,2.5));
   if(SCI.caam) NO_PLANT.push(offsetRing(SCI.caam.ring,2.5),[[122,528],[142,528],[142,552],[122,552]]);
 }
+/* the two halls in a2i_halls.js have no collider yet when the props go down */
+CAMPUS.forEach(function(B){ if(HAND_HALLS[B.name]) NO_PLANT.push(offsetRing(B.ring,B.name==='Michelson Hall'?3:5)); });
 /* nothing grows in the E Line median */
 NO_PLANT.push([[EXPO.xw,255],[300,255],[300,269],[EXPO.xw,269]]);
 /* McCarthy Quad is open lawn, and the Fertitta Hall courtyard is paved seating (a2f_courts.js) */
