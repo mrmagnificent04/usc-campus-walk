@@ -47,6 +47,7 @@ GeoBag.prototype.geom=function(){
       if(a<0||b<0||a===b) continue;
       var L=Math.hypot(GNODE[b][0]-GNODE[a][0],GNODE[b][1]-GNODE[a][1]);
       if(L<0.6||L>90) continue;
+      if(fenceCuts(GNODE[a][0],GNODE[a][1],GNODE[b][0],GNODE[b][1])) continue;   /* students use the entrances */
       if(GADJ[a].indexOf(b)<0) GADJ[a].push(b);
       if(GADJ[b].indexOf(a)<0) GADJ[b].push(a);
     }

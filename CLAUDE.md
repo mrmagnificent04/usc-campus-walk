@@ -9,7 +9,7 @@ Published as a claude.ai artifact, and this repo deploys to Vercel as a static s
 
 - `./build.sh` concatenates the sources into `game.html` (git-ignored) (three.js from cdnjs) and
   `test.html` (uses `three.local.js`, no network):
-  `a_world.js a2_coliseum.js a2b_assoc.js a2c_rose.js a2d_nhm.js a2e_sci.js a2f_courts.js a2g_metro.js a3_landscape.js a4_city.js a4b_skyline.js b_play.js e_crowd.js c_main.js d_loop.js`
+  `a_world.js a2_coliseum.js a2b_assoc.js a2c_rose.js a2d_nhm.js a2e_sci.js a2f_courts.js a2g_metro.js a2h_fence.js a3_landscape.js a4_city.js a4b_skyline.js b_play.js e_crowd.js c_main.js d_loop.js`
   wrapped in `head.html` + `world.txt` (the map data, in a `<script type="text/plain">`).
 - `d_loop.js` is always a copy of `d_loop.rel.js` (release). `d_loop.dev.js` adds debug
   hooks (`window.__cam`, `window.__lock`, `window.__dbg`). Edit BOTH when changing the loop.
@@ -94,11 +94,22 @@ around the rose garden. Chromium occasionally crashes ("Target crashed"); just r
 - Title type is Libre Caslon Text Bold (OFL), embedded as base64 in `head.html` as 'USC Caslon'.
 - Dev hook: `window.__attract(i,t)` pins shot i at time t for screenshots; no args unpins.
 
+## Perimeter fence
+
+- `a2h_fence.js`: black steel picket fence (2.15 m) round campus on Vermont, Jefferson, Figueroa
+  and Exposition. Jamie asked for this in v24, replacing his earlier request for no fence.
+  `RING` is the line, `GATES` the eight pedestrian entrances from USC's entrance map (brick piers
+  and bollards). Other driveways crossing the line get an opening with a barrier arm; buildings on
+  the line replace the fence. Pickets are a canvas texture on one quad per span; posts are geometry.
+- `FENCE_RUNS` (solid stretches) and `fenceCuts()` are used by `e_crowd.js` so students only cross
+  at entrances, and by the minimap in `c_main.js`.
+
 ## Jamie's standing requests (do not undo)
 
 - Walkways: simple gray concrete with a brick edge. No street trees on walkways, no bikes,
-  no tilework, no black perimeter fence, no brick plaza overlay.
+  no tilework, no brick plaza overlay.
 - Traveler statue stays at (20,61).
+- Keep the perimeter fence with gaps only at the marked entrances.
 - No trees in McCarthy Quad or the Fertitta Hall courtyard.
 - Use current building names (DMC, not VKC).
 - Writing style for anything he reads: no em dashes, concise and plain, honest evaluation
@@ -106,6 +117,6 @@ around the rose garden. Chromium occasionally crashes ("Target crashed"); just r
 
 ## Publishing
 
-The live artifact is https://claude.ai/artifact/Jd3u1kv8vcGABwVjfZZHCz (version 23 as of
+The live artifact is https://claude.ai/artifact/Jd3u1kv8vcGABwVjfZZHCz (version 24 as of
 this handoff). Publishing there needs the Artifact tool from a Claude session. From
 Claude Code, rebuild `index.html` and push to GitHub; Vercel redeploys from `main`.
